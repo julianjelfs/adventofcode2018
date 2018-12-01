@@ -1,5 +1,6 @@
 module Main where
 
+import           Day1
+
 main :: IO ()
-main =
-  putStrLn "hello world"
+main = Day1.solve >>= putStrLn . show
