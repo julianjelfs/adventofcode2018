@@ -7,7 +7,7 @@ import           Data.Text                      ( Text )
 import qualified Data.Text                     as Text
 import qualified Data.Text.IO                  as Text
 
-data Counts = Counts Bool Bool deriving (Show)
+data Counts = Counts Bool Bool
 
 partOne :: IO Int
 partOne = checksum . totals . fmap countsInWord . Text.lines <$> Text.readFile
@@ -48,13 +48,13 @@ partTwo = do
   inp <- Text.lines <$> Text.readFile "data/day2.txt"
   pure
     .   commonLetters
-    .   filter (\(a, b) -> b /= Nothing)
+    .   filter (\(_, b) -> b /= Nothing)
     $   (findMatch inp)
     <$> inp
 
 diffByOne :: Text -> Text -> Bool
 diffByOne w1 w2 = (length $ filter not matches) == 1
-  where matches = (\(c1, c2) -> c1 == c2) <$> Text.zip w1 w2
+  where matches = (uncurry (==)) <$> Text.zip w1 w2
 
 commonLetters :: [(Text, Maybe Text)] -> Maybe Text
 commonLetters ((w1, Just w2) : _) = Just . Text.pack $ foldr
