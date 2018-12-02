@@ -1,6 +1,7 @@
 module Day2 where
 
 import qualified Common                        as C
+import qualified Data.List                     as List
 import qualified Data.Map                      as M
 import           Data.Text                      ( Text )
 import qualified Data.Text                     as Text
@@ -8,8 +9,8 @@ import qualified Data.Text.IO                  as Text
 
 data Counts = Counts Bool Bool deriving (Show)
 
-solve :: IO Int
-solve = checksum . totals . fmap countsInWord . Text.lines <$> Text.readFile
+partOne :: IO Int
+partOne = checksum . totals . fmap countsInWord . Text.lines <$> Text.readFile
   "data/day2.txt"
 
 countsInWord :: Text -> Counts
@@ -41,3 +42,29 @@ totals = foldr foldCounts (0, 0)
 
 checksum :: (Int, Int) -> Int
 checksum (twos, threes) = twos * threes
+
+partTwo :: IO (Maybe Text)
+partTwo = do
+  inp <- Text.lines <$> Text.readFile "data/day2.txt"
+  pure
+    .   commonLetters
+    .   filter (\(a, b) -> b /= Nothing)
+    $   (findMatch inp)
+    <$> inp
+
+diffByOne :: Text -> Text -> Bool
+diffByOne w1 w2 = (length $ filter not matches) == 1
+  where matches = (\(c1, c2) -> c1 == c2) <$> Text.zip w1 w2
+
+commonLetters :: [(Text, Maybe Text)] -> Maybe Text
+commonLetters ((w1, Just w2) : _) = Just . Text.pack $ foldr
+  (\(c1, c2) w -> if c1 == c2 then c1 : w else w)
+  ""
+  (Text.zip w1 w2)
+commonLetters _ = Nothing
+
+
+findMatch :: [Text] -> Text -> (Text, Maybe Text)
+findMatch all word = case filter (diffByOne word) all of
+  []      -> (word, Nothing)
+  (x : _) -> (word, Just x)
