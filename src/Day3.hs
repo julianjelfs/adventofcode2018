@@ -40,14 +40,9 @@ intersectionsForClaim all (Claim claimId coords) =
 
 claimParser :: Parser Claim
 claimParser = do
-    _ <- P.char '#'
-    claimId <- C.numberParser
-    _ <- P.string " @ "
-    x <- C.numberParser
-    _ <- P.char ','
-    y <- C.numberParser
-    _ <- P.string ": "
-    w <- C.numberParser
-    _ <- P.char 'x'
-    h <- C.numberParser
+    claimId <- P.char '#' *> C.numberParser
+    x <- P.string " @ " *> C.numberParser
+    y <- P.char ',' *> C.numberParser
+    w <- P.string ": " *> C.numberParser
+    h <- P.char 'x' *> C.numberParser
     pure $ Claim claimId (S.fromList [ (a, b) | a <- [x .. (x + (w-1))], b <- [y .. (y + (h-1))] ])
