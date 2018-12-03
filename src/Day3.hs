@@ -1,31 +1,47 @@
 module Day3 where
 
 import qualified Common                        as C
+import qualified Data.Set                      as S
 import qualified Text.Parsec                   as P
-import           Text.ParserCombinators.Parsec  ( ParseError
-                                                , Parser
-                                                )
+import           Text.ParserCombinators.Parsec (Parser)
 
-data Claim = Claim
-    { coords :: (Int, Int)
-    , dims   :: (Int, Int)
-    } deriving (Show)
+data Claim = Claim Int (S.Set (Int, Int)) deriving Show
 
+instance Semigroup Claim where
+    (Claim _ a) <> (Claim _ b) = Claim 0 (a <> b)
+
+instance Monoid Claim where
+    mempty = Claim 0 S.empty
 
 partOne :: IO Int
 partOne = do
+  (Claim _ s) <- foldMap id <$> intersectionsForClaims
+  pure $ length s
+
+partTwo :: IO [Claim]
+partTwo = filter (\(Claim claimId ints) -> null ints) <$> intersectionsForClaims
+
+intersectionsForClaims :: IO [Claim]
+intersectionsForClaims = do
   claims <- traverse (C.parse claimParser) . lines <$> readFile "data/day3.txt"
   pure $ case claims of
-    Left  err -> 0
-    Right c   -> length . filter ((>) 1) $ countOverlaps c <$> coords
- where
-  coords :: [(Int, Int)]
-  coords = [ (x, y) | x <- [0 .. 999], y <- [0 .. 999] ]
+    Left  err -> []
+    Right c   ->
+        intersectionsForClaim c <$> c
 
-  claimParser :: Parser Claim
-  claimParser = do
+intersectionsForClaim :: [Claim] -> Claim -> Claim
+intersectionsForClaim all (Claim claimId coords) =
+    Claim claimId . foldMap id $
+        (\(Claim claimId' coords') ->
+            if claimId /= claimId'
+            then coords `S.intersection` coords'
+            else S.empty
+        ) <$> all
+
+claimParser :: Parser Claim
+claimParser = do
     _ <- P.char '#'
-    _ <- C.numberParser
+    claimId <- C.numberParser
     _ <- P.string " @ "
     x <- C.numberParser
     _ <- P.char ','
@@ -34,15 +50,4 @@ partOne = do
     w <- C.numberParser
     _ <- P.char 'x'
     h <- C.numberParser
-    pure $ Claim (x, y) (w, h)
-
-countOverlaps :: [Claim] -> (Int, Int) -> Int
-countOverlaps claims coord = length $ filter (overlaps coord) claims
-
-overlaps :: (Int, Int) -> Claim -> Bool
-overlaps (x, y) (Claim (x', y') (w, h)) =
-  (x >= x' && x < (x' + w)) && (y >= y' && y < (y' + h))
-
-
-
-
+    pure $ Claim claimId (S.fromList [ (a, b) | a <- [x .. (x + (w-1))], b <- [y .. (y + (h-1))] ])
