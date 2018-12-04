@@ -13,8 +13,6 @@ type Minutes = M.Map Int Int
 
 data RawData = RawData String Int Int Event deriving Show
 
-newtype Shifts = Shifts (M.Map Int [Event]) deriving Show
-
 instance Eq RawData where
     (RawData s1 _ _ _) == (RawData s2 _ _ _) = s1 == s2
 
@@ -28,7 +26,7 @@ partOne = do
   inp <- traverse (C.parse shiftParser) . lines <$> readFile "data/day4.txt"
   pure $ case inp of
     Left  _ -> (Nothing, 0, 0)
-    Right s -> mostAsleepMinute . minutesAsleep . Shifts $ foldShifts Nothing (List.sort s) M.empty
+    Right s -> mostAsleepMinute . minutesAsleep $ foldShifts Nothing (List.sort s) M.empty
 
 partTwo :: IO (Int, Int, Int)
 partTwo = do
@@ -64,14 +62,14 @@ foldShifts guardId (RawData _ h min e : t) shifts =
                     Just _ -> M.update (\events -> Just $ events <> [e]) guardId' shifts
                     Nothing -> M.insert guardId' [e] shifts
 
-minutesAsleep :: Shifts -> (Maybe Int, Int, [(Int, Int)])
-minutesAsleep (Shifts shifts) =
+minutesAsleep :: M.Map Int [Event] -> (Maybe Int, Int, [(Int, Int)])
+minutesAsleep =
     M.foldrWithKey
         (\k events (k', mx, r) ->
             let ranges = flatten events
                 mins = minutesAsleep' ranges
             in if mins > mx then (Just k, mins, ranges) else (k', mx, r)
-        ) (Nothing, 0, []) shifts
+        ) (Nothing, 0, [])
 
 mostAsleepMinute :: (Maybe Int, Int, [(Int, Int)]) -> (Maybe Int, Int, Int)
 mostAsleepMinute (Just guardId, _, ranges) =
