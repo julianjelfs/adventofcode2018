@@ -1,7 +1,5 @@
 module Day2 where
 
-import qualified Common                        as C
-import qualified Data.List                     as List
 import qualified Data.Map                      as M
 import           Data.Text                      ( Text )
 import qualified Data.Text                     as Text
@@ -65,6 +63,6 @@ commonLetters _ = Nothing
 
 
 findMatch :: [Text] -> Text -> (Text, Maybe Text)
-findMatch all word = case filter (diffByOne word) all of
+findMatch all' word = case filter (diffByOne word) all' of
   []      -> (word, Nothing)
   (x : _) -> (word, Just x)

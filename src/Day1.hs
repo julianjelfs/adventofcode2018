@@ -3,7 +3,6 @@ module Day1
   )
 where
 
-import qualified Common                        as C
 import           Data.Maybe                     ( catMaybes )
 import qualified Data.Set                      as Set
 import           Text.Read                      ( readMaybe )
@@ -18,7 +17,7 @@ solve = do
   readNum str        = readMaybe str
 
   firstDup :: Int -> Set.Set Int -> [Int] -> Maybe Int
-  firstDup freq prev [] = Nothing
+  firstDup _ _ [] = Nothing
   firstDup freq prev (x : xs)
     | Set.member freq prev = Just freq
     | otherwise            = firstDup (freq + x) (Set.insert freq prev) xs
