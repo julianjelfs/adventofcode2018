@@ -2,54 +2,122 @@ module Day4 where
 
 import qualified Common                        as C
 import qualified Data.List                     as List
+import qualified Data.List.Split               as List
 import qualified Data.Map                      as M
+import           Data.Maybe                    (catMaybes)
 import qualified Data.Set                      as S
 import qualified Text.Parsec                   as P
-import           Text.ParserCombinators.Parsec  ( Parser )
+import           Text.ParserCombinators.Parsec (Parser)
 
 type Minutes = M.Map Int Int
 
-data Shift = Shift String Int Int Event deriving Show
+data RawData = RawData String Int Int Event deriving Show
 
-instance Eq Shift where
-    (Shift s1 _ _ _) == (Shift s2 _ _ _) = s1 == s2
+newtype Shifts = Shifts (M.Map Int [Event]) deriving Show
 
-instance Ord Shift where
-    (Shift s1 _ _ _) `compare` (Shift s2 _ _ _) = s1 `compare` s2
+instance Eq RawData where
+    (RawData s1 _ _ _) == (RawData s2 _ _ _) = s1 == s2
 
+instance Ord RawData where
+    (RawData s1 _ _ _) `compare` (RawData s2 _ _ _) = s1 `compare` s2
 
-data Event = Start Int | Asleep | Awake deriving Show
+data Event = Start Int | Asleep Int Int | Awake Int Int deriving Show
 
-partOne :: IO [Shift]
+partOne :: IO (Maybe Int, Int, Int)
 partOne = do
   inp <- traverse (C.parse shiftParser) . lines <$> readFile "data/day4.txt"
   pure $ case inp of
-    Left  _ -> []
-    Right s -> List.sort s
+    Left  _ -> (Nothing, 0, 0)
+    Right s -> mostAsleepMinute . minutesAsleep . Shifts $ foldShifts Nothing (List.sort s) M.empty
 
--- partTwo :: IO [Claim]
--- partTwo =
---   filter (\(Claim claimId ints) -> null ints) <$> intersectionsForClaims
+partTwo :: IO (Int, Int, Int)
+partTwo = do
+  inp <- traverse (C.parse shiftParser) . lines <$> readFile "data/day4.txt"
+  pure $ case inp of
+    Left  _ -> (0, 0, 0)
+    Right s -> maxFrequency . frequencies $ foldShifts Nothing (List.sort s) M.empty
+
+maxFrequency :: M.Map Int (Int, Int) -> (Int, Int, Int)
+maxFrequency =
+    M.foldrWithKey
+        (\k (m, f) (k', m', f') ->
+            if f > f' then (k, m, f) else (k', m', f')
+        ) (0, 0, 0)
+
+frequencies :: M.Map Int [Event] -> M.Map Int (Int, Int)
+frequencies =
+    M.map
+        (\events ->
+            let (_, m, f) = mostAsleepMinute (Just 0, 0, flatten events)
+            in (m, f)
+        )
+
+foldShifts :: Maybe Int -> [RawData] -> M.Map Int [Event] -> M.Map Int [Event]
+foldShifts _ [] shifts = shifts
+foldShifts guardId (RawData _ h min e : t) shifts =
+    case (guardId, e) of
+        (Nothing, Start guardId') -> foldShifts (Just guardId') t shifts
+        (Just _, Start guardId') -> foldShifts (Just guardId') t shifts
+        (Just guardId', e) ->
+            foldShifts (Just guardId') t $
+                case shifts M.!? guardId' of
+                    Just _ -> M.update (\events -> Just $ events <> [e]) guardId' shifts
+                    Nothing -> M.insert guardId' [e] shifts
+
+minutesAsleep :: Shifts -> (Maybe Int, Int, [(Int, Int)])
+minutesAsleep (Shifts shifts) =
+    M.foldrWithKey
+        (\k events (k', mx, r) ->
+            let ranges = flatten events
+                mins = minutesAsleep' ranges
+            in if mins > mx then (Just k, mins, ranges) else (k', mx, r)
+        ) (Nothing, 0, []) shifts
+
+mostAsleepMinute :: (Maybe Int, Int, [(Int, Int)]) -> (Maybe Int, Int, Int)
+mostAsleepMinute (Just guardId, _, ranges) =
+    let (m, mx) = foldr
+            (\m (m', mx) ->
+               let n = length $ filter (inRange m) ranges
+               in if n > mx then (m, n) else (m', mx)
+            ) (0,0) [0..59]
+    in (Just guardId, m, mx)
+    where
+        inRange :: Int -> (Int, Int) -> Bool
+        inRange n (f,t) = n >= f && n < t
+
+minutesAsleep' :: [(Int, Int)] -> Int
+minutesAsleep' =
+    foldr (\(f, t) total -> total + (t - f)) 0
+
+flatten :: [Event] -> [(Int, Int)]
+flatten events =
+    catMaybes $ toRange <$> List.chunksOf 2 events
+
+toRange :: [Event] -> Maybe (Int, Int)
+toRange [Asleep _ m, Awake _ m'] = Just (m, m')
+toRange _                        = Nothing
 
 
-shiftParser :: Parser Shift
+shiftParser :: Parser RawData
 shiftParser = do
-  m <- P.char '[' *> C.numberParser *> P.char '-' *> C.numberParser <* P.char
-    '-'
-  d   <- C.numberParser <* P.char ' '
-  h   <- C.numberParser <* P.char ':'
-  min <- C.numberParser <* P.string "] "
-  e   <- eventParser
-  pure $ Shift
-    ((show m) <> "-" <> (show d) <> " " <> (show h) <> ":" <> (show min))
-    h
-    min
+  y   <- P.char '[' *> P.manyTill P.anyChar (P.char '-')
+  m   <- P.manyTill P.anyChar (P.char '-')
+  d   <- P.manyTill P.anyChar (P.char ' ')
+  h   <- P.manyTill P.anyChar (P.char ':')
+  min <- P.manyTill P.anyChar (P.char ']')
+  _ <- P.char ' '
+  e   <- eventParser (read h) (read min)
+  pure $ RawData
+    (y <> "-" <> m <> "-" <> d <> " " <> h <> ":" <> min)
+    (read h)
+    (read min)
     e
 
-
-eventParser :: Parser Event
-eventParser =
-  (Start <$> (P.string "Guard #" *> C.numberParser <* P.string " begins shift"))
-    P.<|> (Asleep <$ P.string "falls asleep")
-    P.<|> (Awake <$ P.string "wakes up")
+eventParser :: Int -> Int -> Parser Event
+eventParser h min =
+    P.choice
+        [ Start <$> (P.string "Guard #" *> C.numberParser <* P.string " begins shift")
+        , Asleep h min <$ P.string "falls asleep"
+        , Awake h min <$ P.string "wakes up"
+        ]
 
