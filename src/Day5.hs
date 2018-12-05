@@ -46,12 +46,9 @@ solve t = foldMap id allunits
 
 findShortest :: Text -> [(Char, Unit)]
 findShortest t = solveWithout t <$> ['a' .. 'z']
+ where
+  solveWithout :: Text -> Char -> (Char, Unit)
+  solveWithout t c = (c, solve $ Text.filter (notChar c) t)
 
-solveWithout :: Text -> Char -> (Char, Unit)
-solveWithout t c = (c, solve $ Text.filter (notChar c) t)
-
-notChar :: Char -> Char -> Bool
-notChar l c = Char.ord l /= Char.ord c + 32 && l /= c
-
-testInput :: Text
-testInput = "dabAcCaCBAcCcaDA"
+  notChar :: Char -> Char -> Bool
+  notChar l c = Char.ord l /= Char.ord c + 32 && l /= c
