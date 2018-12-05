@@ -22,6 +22,7 @@ executable adventofcode2018
                       , Day2
                       , Day3
                       , Day4
+                      , Day5
   main-is:             Main.hs
   default-language:    Haskell2010
   build-depends:       base >= 4.7 && < 5
