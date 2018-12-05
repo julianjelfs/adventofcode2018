@@ -2,10 +2,11 @@
 
 module Day5 where
 
-import qualified Data.Char    as Char
-import           Data.Text    (Text)
-import qualified Data.Text    as Text
-import qualified Data.Text.IO as Text
+import qualified Data.Char     as Char
+import           Data.Foldable (fold)
+import           Data.Text     (Text)
+import qualified Data.Text     as Text
+import qualified Data.Text.IO  as Text
 
 newtype Unit = Unit Text deriving Show
 
@@ -32,7 +33,7 @@ solution = do
   mapLengths (Unit u) = Text.length u
 
 reactPolymer :: Text -> Unit
-reactPolymer t = foldMap id allunits
+reactPolymer t = fold allunits
  where
   allunits :: [Unit]
   allunits = Text.foldr (\c units -> Unit (Text.singleton c) : units) [] t
