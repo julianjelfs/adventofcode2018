@@ -47,19 +47,19 @@ nearestPoint :: [Point] -> GridPoint -> Areas -> Areas
 nearestPoint points gridPoint areas =
     case uniqueMin $ (\p -> (p, manhattanDistance gridPoint p)) <$> points of
         Nothing -> areas
-        Just (p, _) ->
+        Just p ->
             if p `M.member` areas
             then M.update (Just . S.insert gridPoint) p areas
             else M.insert p (S.singleton gridPoint) areas
 
-uniqueMin :: [(Point, Int)] -> Maybe (Point, Int)
+uniqueMin :: [(Point, Int)] -> Maybe Point
 uniqueMin points = case foldr
     (\(p, n) (ps, mn) ->
         if n < mn then ([p], n)
         else if n == mn then (p : ps, n)
         else (ps, mn)
     ) ([], maxBound) points of
-    ([p], n) -> Just (p, n)
+    ([p], _) -> Just p
     _        -> Nothing
 
 infiniteArea :: [Point] -> Point -> Bool
