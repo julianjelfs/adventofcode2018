@@ -63,24 +63,9 @@ nearestPoint points gridPoint areas =
         _             -> areas
 
 infiniteArea :: [Point] -> Point -> Bool
-infiniteArea points point =
-  not
-    $  any (left point)  points
-    && any (right point) points
-    && any (up point)    points
-    && any (down point)  points
- where
-  left :: Point -> Point -> Bool
-  left (x1, _) (x2, _) = x2 > x1
-
-  right :: Point -> Point -> Bool
-  right (x1, _) (x2, _) = x2 < x1
-
-  up :: Point -> Point -> Bool
-  up (_, y1) (_, y2) = y2 < y1
-
-  down :: Point -> Point -> Bool
-  down (_, y1) (_, y2) = y2 > y1
+infiniteArea points (x, y) =
+    let ((minx, miny), (maxx, maxy)) = getBounds points
+    in x == minx || x == maxx || y == miny || y == maxy
 
 manhattanDistance :: GridPoint -> Point -> Int
 manhattanDistance (x1, y1) (x2, y2) = abs (x1 - x2) + abs (y1 - y2)
