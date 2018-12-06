@@ -45,22 +45,22 @@ removeInfinites points =
 
 nearestPoint :: [Point] -> GridPoint -> Areas -> Areas
 nearestPoint points gridPoint areas =
-    let res = foldr
-            (\p agg ->
-                let m = manhattanDistance gridPoint p
-                in case agg of
-                    Nothing -> Just ([p], m)
-                    Just (ps, m')
-                        | m < m' -> Just ([p], m)
-                        | m == m' -> Just (p:ps, m)
-                        | otherwise -> agg
-            ) Nothing points
-    in case res of
-        Just ([p], _) ->
+    case uniqueMin $ (\p -> (p, manhattanDistance gridPoint p)) <$> points of
+        Nothing -> areas
+        Just (p, _) ->
             if p `M.member` areas
             then M.update (Just . S.insert gridPoint) p areas
             else M.insert p (S.singleton gridPoint) areas
-        _             -> areas
+
+uniqueMin :: [(Point, Int)] -> Maybe (Point, Int)
+uniqueMin points = case foldr
+    (\(p, n) (ps, mn) ->
+        if n < mn then ([p], n)
+        else if n == mn then (p : ps, n)
+        else (ps, mn)
+    ) ([], maxBound) points of
+    ([p], n) -> Just (p, n)
+    _        -> Nothing
 
 infiniteArea :: [Point] -> Point -> Bool
 infiniteArea points (x, y) =
