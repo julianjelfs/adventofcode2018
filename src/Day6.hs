@@ -10,26 +10,25 @@ type Point = (Int, Int)
 type GridPoint = (Int, Int)
 type Areas = M.Map Point (S.Set GridPoint)
 
-testPoints :: [Point]
-testPoints =
-    [ (1,1)
-    , (1,6)
-    , (8,3)
-    , (3,4)
-    , (5,5)
-    , (8,9)
-    ]
-
-partOne :: IO Int
-partOne = do
+solution :: IO (Int, Int)
+solution = do
   inp <- traverse (C.parse coordParser) . lines <$> readFile "data/day6.txt"
   pure $ case inp of
-    Left  _ -> 0
-    Right c -> largestArea $ removeInfinites c $ foldr (nearestPoint c) M.empty (grid c)
+    Left  _ -> (0, 0)
+    Right c ->
+        let g = grid c
+        in
+            ( largestArea $ removeInfinites c $ foldr (nearestPoint c) M.empty g
+            , length $ filter (safe c) g
+            )
 
 grid :: [Point] -> [GridPoint]
 grid points = [ (x, y) | x <- [minx .. maxx], y <- [miny .. maxy] ]
   where ((minx, miny), (maxx, maxy)) = getBounds points
+
+safe :: [Point] -> GridPoint -> Bool
+safe points point =
+    10000 > sum (manhattanDistance point <$> points)
 
 largestArea :: Areas -> Int
 largestArea =
@@ -63,7 +62,6 @@ nearestPoint points gridPoint areas =
             else M.insert p (S.singleton gridPoint) areas
         _             -> areas
 
---a point's are will be infinite if it is not surrounded by other points
 infiniteArea :: [Point] -> Point -> Bool
 infiniteArea points point =
   not
