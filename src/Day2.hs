@@ -1,6 +1,7 @@
 module Day2 where
 
 import qualified Data.Map                      as M
+import           Data.Maybe                     ( isJust )
 import           Data.Text                      ( Text )
 import qualified Data.Text                     as Text
 import qualified Data.Text.IO                  as Text
@@ -22,9 +23,9 @@ countsInWord w = M.foldr
   dict
  where
   dict = Text.foldr
-    (\c m -> case c `M.member` m of
-      True  -> M.update (\v -> Just (v + 1)) c m
-      False -> M.insert c 1 m
+    (\c m -> if c `M.member` m
+      then M.update (\v -> Just (v + 1)) c m
+      else M.insert c 1 m
     )
     M.empty
     w
@@ -44,15 +45,11 @@ checksum (twos, threes) = twos * threes
 partTwo :: IO (Maybe Text)
 partTwo = do
   inp <- Text.lines <$> Text.readFile "data/day2.txt"
-  pure
-    .   commonLetters
-    .   filter (\(_, b) -> b /= Nothing)
-    $   (findMatch inp)
-    <$> inp
+  pure . commonLetters . filter (\(_, b) -> isJust b) $ findMatch inp <$> inp
 
 diffByOne :: Text -> Text -> Bool
-diffByOne w1 w2 = (length $ filter not matches) == 1
-  where matches = (uncurry (==)) <$> Text.zip w1 w2
+diffByOne w1 w2 = length (filter not matches) == 1
+  where matches = uncurry (==) <$> Text.zip w1 w2
 
 commonLetters :: [(Text, Maybe Text)] -> Maybe Text
 commonLetters ((w1, Just w2) : _) = Just . Text.pack $ foldr
@@ -60,7 +57,6 @@ commonLetters ((w1, Just w2) : _) = Just . Text.pack $ foldr
   ""
   (Text.zip w1 w2)
 commonLetters _ = Nothing
-
 
 findMatch :: [Text] -> Text -> (Text, Maybe Text)
 findMatch all' word = case filter (diffByOne word) all' of

@@ -1,6 +1,7 @@
 module Day3 where
 
 import qualified Common                        as C
+import           Data.Foldable                  ( fold )
 import qualified Data.Set                      as S
 import qualified Text.Parsec                   as P
 import           Text.ParserCombinators.Parsec  ( Parser )
@@ -15,7 +16,7 @@ instance Monoid Claim where
 
 partOne :: IO Int
 partOne = do
-  (Claim _ s) <- foldMap id <$> intersectionsForClaims
+  (Claim _ s) <- fold <$> intersectionsForClaims
   pure $ length s
 
 partTwo :: IO [Claim]
@@ -31,7 +32,7 @@ intersectionsForClaims = do
 intersectionsForClaim :: [Claim] -> Claim -> Claim
 intersectionsForClaim all' (Claim claimId coords) =
   Claim claimId
-    .   foldMap id
+    .   fold
     $   (\(Claim claimId' coords') -> if claimId /= claimId'
           then coords `S.intersection` coords'
           else S.empty

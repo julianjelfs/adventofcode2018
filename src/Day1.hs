@@ -3,13 +3,13 @@ module Day1
   )
 where
 
-import           Data.Maybe                     ( catMaybes )
+import           Data.Maybe                     ( mapMaybe )
 import qualified Data.Set                      as Set
 import           Text.Read                      ( readMaybe )
 
 solve :: IO (Maybe Int)
 solve = do
-  inp <- cycle . catMaybes . fmap readNum . lines <$> readFile "data/day1.txt"
+  inp <- cycle . mapMaybe readNum . lines <$> readFile "data/day1.txt"
   return $ firstDup 0 Set.empty inp
  where
   readNum :: String -> Maybe Int
