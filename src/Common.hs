@@ -16,3 +16,7 @@ numberParser = rd <$> (plus <|> minus <|> number)
 parse :: Parser a -> String -> Either ParseError a
 parse parser = Text.Parsec.parse parser []
 
+safeHead :: [a] -> Maybe a
+safeHead []      = Nothing
+safeHead (x : _) = Just x
+
