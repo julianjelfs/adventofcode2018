@@ -1,6 +1,7 @@
 module Day7 where
 
 import qualified Common                        as C
+import qualified Data.Char                     as Char
 import qualified Data.List                     as L
 import qualified Data.Map                      as M
 import qualified Data.Set                      as S
@@ -9,12 +10,15 @@ import           Text.ParserCombinators.Parsec (Parser)
 
 type Dependencies = M.Map Char (S.Set Char)
 
-solution :: IO String
+solution :: IO (String, Int)
 solution = do
   inp <- traverse (C.parse instrParser) . lines <$> readFile "data/day7.txt"
   pure $ case inp of
     Left  _ -> undefined
-    Right i -> partOne $ parse i
+    Right i ->
+        ( partOne $ parse i
+        , partTwo [] (parse i) 0
+        )
 
 partOne :: Dependencies -> String
 partOne = go
@@ -44,15 +48,41 @@ instrParser = do
   after  <- P.string " must be finished before step " *> P.anyChar
   pure (before, after)
 
-testInput :: [(Char, Char)]
-testInput =
-  [ ('C', 'A')
-  , ('C', 'F')
-  , ('A', 'B')
-  , ('A', 'D')
-  , ('B', 'E')
-  , ('D', 'E')
-  , ('F', 'E')
-  ]
+effort :: Char -> Int
+effort c = (Char.ord c - 64) + baseEffort
 
+baseEffort :: Int
+baseEffort = 60
 
+maxWorkers :: Int
+maxWorkers = 5
+
+partTwo :: [(Char, Int)] -> Dependencies -> Int -> Int
+partTwo inprog d n =
+    let (ip, comp) = makeProgress inprog
+        d' = completeTasks d comp
+        avail = filter (notInProg ip) (M.keys $ M.filter S.null d')
+        canProcess = take (maxWorkers - length ip) avail
+    in
+        case (ip, avail) of
+            ([], []) -> n
+            _ -> partTwo (ip <> ((\c -> (c, effort c)) <$> canProcess)) d' (n+1)
+    where
+        notInProg :: [(Char, Int)] -> Char -> Bool
+        notInProg p c = not $ any (\(c', _) -> c' == c) p
+
+completeTasks :: Dependencies -> String -> Dependencies
+completeTasks =
+    foldr
+        (\c m ->
+            M.map (S.delete c) $ M.delete c m
+        )
+
+makeProgress :: [(Char, Int)] -> ([(Char, Int)], String)
+makeProgress =
+    foldr
+        (\(c, n) (inprog', complete) ->
+            if n > 1
+            then ((c, n - 1) : inprog', complete)
+            else (inprog', c : complete)
+        ) ([], [])
