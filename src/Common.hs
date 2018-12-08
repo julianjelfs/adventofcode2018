@@ -20,3 +20,9 @@ safeHead :: [a] -> Maybe a
 safeHead []      = Nothing
 safeHead (x : _) = Just x
 
+(!?) :: [a] -> Int -> Maybe a
+(!?) = go 0
+ where
+  go _ [] _ = Nothing
+  go n (h : t) i | n == i    = Just h
+                 | otherwise = go (n + 1) t i
