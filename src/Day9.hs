@@ -1,8 +1,7 @@
 module Day9 where
 
-import           Data.Sequence                  ( Seq
-                                                , (!?)
-                                                )
+import qualified Data.IntMap                   as IM
+import           Data.Sequence                  ( Seq )
 import qualified Data.Sequence                 as Seq
 --import           Debug.Trace                    ( traceShowId )
 
@@ -10,19 +9,16 @@ solution :: (Int, Int)
 solution = (partOne, partTwo)
 
 partOne :: Int
-partOne = go (Seq.replicate numWorkers 0) (Seq.fromList [0]) 0 1
+partOne = go IM.empty (Seq.fromList [0]) 0 1
  where
-  go :: Seq Int -> Seq Int -> Int -> Int -> Int
+  go :: IM.IntMap Int -> Seq Int -> Int -> Int -> Int
   go workers circle ix n
     | n `mod` 23 == 0
-    = let ix'          = (ix - 7) `mod` Seq.length circle
-          circle'      = Seq.deleteAt ix' circle
-          score        = n + Seq.index circle ix'
-          wi           = workerIndex n
-          currentScore = workers !? wi
-          workers'     = case currentScore of
-            Nothing -> error "shit"
-            Just s  -> Seq.update wi (s + score) workers
+    = let ix'      = (ix - 7) `mod` Seq.length circle
+          circle'  = Seq.deleteAt ix' circle
+          score    = n + Seq.index circle ix'
+          wi       = workerIndex n
+          workers' = IM.insertWith (+) wi score workers
       in  if score == target
             then maximum workers'
             else go workers' circle' ix' (n + 1)
