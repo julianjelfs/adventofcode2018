@@ -42,3 +42,4 @@ executable adventofcode2018
                       , matrix
                       , primes
                       , text
+                      , pointedlist
