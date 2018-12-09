@@ -1,44 +1,43 @@
 module Day9 where
 
 import qualified Data.IntMap                   as IM
+import           Data.List                      ( foldl' )
 import           Data.Sequence                  ( Seq )
 import qualified Data.Sequence                 as Seq
--- import           Debug.Trace                    ( traceShowId )
 
-solution :: ((Seq Int, Int), Int)
-solution = (partOne, partTwo)
+data State = State
+    { scores :: IM.IntMap Int
+    , index  :: Int
+    , circle :: Seq Int
+    } deriving Show
 
-partOne :: (Seq Int, Int)
-partOne = go IM.empty (Seq.fromList [0]) 0 1
+solution :: (Int, Int)
+solution =
+  (maximum . scores $ solve 72061, maximum . scores $ solve (72061 * 100))
+
+solve :: Int -> State
+solve target = foldl' go (State IM.empty 0 (Seq.fromList [0])) [1 .. target]
  where
-  go :: IM.IntMap Int -> Seq Int -> Int -> Int -> (Seq Int, Int)
-  go workers circle ix n
+  go :: State -> Int -> State
+  go (State scores index circle) n
     | n `mod` 23 == 0
-    = let ix'      = moveBack circle ix
-          circle'  = Seq.deleteAt ix' circle
-          score    = n + Seq.index circle ix'
-          workers' = IM.insertWith (+) (workerIndex n) score workers
-      in  if score == target
-            then (circle', maximum workers')
-            else go workers' circle' (adjustIndex circle ix') (n + 1)
+    = let index'  = moveBack circle index
+          circle' = Seq.deleteAt index' circle
+          score   = n + Seq.index circle index'
+          scores' = IM.insertWith (+) (workerIndex n) score scores
+      in  State scores' (adjustIndex circle index') circle'
     | otherwise
-    = let ix' = nextIndex circle ix
-      in  go workers (Seq.insertAt ix' n circle) ix' (n + 1)
+    = let index' = nextIndex circle index
+      in  State scores index' (Seq.insertAt index' n circle)
 
 adjustIndex :: Seq Int -> Int -> Int
-adjustIndex s i = if i == length s - 1 then 0 else i
+adjustIndex s i = if Seq.length s - 1 == i then 0 else i
 
 workerIndex :: Int -> Int
 workerIndex marble = marble `mod` numWorkers
 
-partTwo :: Int
-partTwo = undefined
-
 numWorkers :: Int
-numWorkers = 10
-
-target :: Int
-target = 1618
+numWorkers = 428
 
 nextIndex :: Seq Int -> Int -> Int
 nextIndex s i = (i + 1) `mod` Seq.length s + 1
