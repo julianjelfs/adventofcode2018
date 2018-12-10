@@ -1,9 +1,9 @@
 module Day10 where
 
 import qualified Common                        as C
---import           Debug.Trace                    ( traceShowId )
+import           Data.List                     (foldl')
 import qualified Text.Parsec                   as P
-import           Text.ParserCombinators.Parsec  ( Parser )
+import           Text.ParserCombinators.Parsec (Parser)
 
 data Point = Point Position Velocity deriving Show
 data Position = Position Int Int deriving Show
@@ -15,8 +15,20 @@ solution = do
   case inp of
     Left _ -> print "error"
     Right points ->
-        -- iterate a few times and look for the smallest bounding box
-      print ""
+        print . show . (+ 1) . time $ foldl'
+            (\(n, b, p) n' ->
+                let p' = movePoints p
+                    b' = sumBounds . getBounds $ p'
+                in  if b' < b
+                    then (n', b', p')
+                    else (n, b, p)
+            ) (0, maxBound, points) [0..20000]
+
+third :: (a,b,c) -> c
+third (_, _, c) = c
+
+time :: (a,b,c) -> a
+time (a, _, _) = a
 
 movePoints :: [Point] -> [Point]
 movePoints = fmap
@@ -24,6 +36,9 @@ movePoints = fmap
     Point (Position (x + dx) (y + dy)) v
   )
 
+sumBounds :: ((Int, Int), (Int, Int)) -> Int
+sumBounds ((minx, miny), (maxx, maxy)) =
+    (maxx - minx) + (maxy - miny)
 
 showPoints :: [Point] -> String
 showPoints points = unlines
