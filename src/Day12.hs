@@ -2,7 +2,6 @@ module Day12 where
 
 import qualified Common                        as C
 import qualified Data.List                     as List
-import qualified Data.Set                      as S
 import qualified Data.Vector                   as V
 import qualified Text.Parsec                   as P
 import           Text.ParserCombinators.Parsec (Parser)
@@ -26,13 +25,6 @@ solution = do
 
 snd' :: (a,b,c) -> b
 snd' (_,b,_) = b
-
-setify :: [(Int, Int, String)] -> Int
-setify results =
-    S.size . S.fromList $ (\(start, _, str) -> (start, str)) <$> results
-
-numberOfStates :: (Int, String, S.Set Int) -> Int
-numberOfStates (_, _, s) = S.size s
 
 initialState :: String
 initialState
