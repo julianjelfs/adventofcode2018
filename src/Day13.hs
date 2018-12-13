@@ -2,11 +2,12 @@
 
 module Day13 where
 
-import qualified Data.List as L
-import           Data.Map  (Map)
-import qualified Data.Map  as M
-import           Data.Set  (Set)
-import qualified Data.Set  as S
+import qualified Data.List                     as L
+import           Data.Map                       ( Map )
+import qualified Data.Map                      as M
+import           Data.Maybe                     ( isJust )
+import           Data.Set                       ( Set )
+import qualified Data.Set                      as S
 
 type Coord = (Int,Int)
 
@@ -36,83 +37,77 @@ data State = State
     } deriving Show
 
 solution :: IO (Maybe Coord)
-solution =
-  eventLoop . parseState . lines <$> readFile "data/day13.txt"
+solution = eventLoop . parseState . lines <$> readFile "data/day13.txt"
+
+extractCoord :: Car -> Coord
+extractCoord (Car c _ _) = c
+
+swaperoo :: Car -> Map Coord [Car] -> Bool
+swaperoo (Car c _ _) = isJust . M.lookup c
 
 eventLoop :: State -> Maybe Coord
 eventLoop State {..} =
-    --list of cars mapped to a list of moved cars. Process the moved list and
-    --gather any car that is in the same position as any other car
-    --gather any car that has swapped position with any other car
-    --remove the gathered cars
-    --
-    --
-    --the problem is that we may have two cars like this "---><---"
-    --that will become "---<>---" and will not be detected as a collision
-    let updatedCars =
-            L.foldl'
-                (\cars' car ->
-                      let car'@(Car c' _ _) = moveCar track car
-                      in case M.lookup c' cars' of
-                        Nothing -> M.insert c' [car'] cars'
-                        Just _  -> M.update (\l -> Just $ car' : l) c' cars'
-                ) M.empty (L.sort $ S.toList cars)
-        deduped = dedupeCars updatedCars
-    in case M.size deduped of
-            1 -> lastCarCoord deduped
-            _ -> eventLoop (State { cars = concatCars deduped, ..})
+  let deduped = dedupeCars $ L.foldl'
+        (\cars' car -> if swaperoo car cars'
+          then M.update (\l -> Just $ car : l) (extractCoord car) cars'
+          else
+            let car'@(Car c' _ _) = moveCar track car
+            in  case M.lookup c' cars' of
+                  Nothing -> M.insert c' [car'] cars'
+                  Just _  -> M.update (\l -> Just $ car' : l) c' cars'
+        )
+        M.empty
+        (L.sort $ S.toList cars)
+  in  case M.size deduped of
+        1 -> lastCarCoord deduped
+        _ -> eventLoop (State {cars = concatCars deduped, ..})
 
 dedupeCars :: Map Coord [a] -> Map Coord [a]
-dedupeCars = M.filter (\cars -> L.length cars == 1)
+dedupeCars = M.filter ((== 1) . L.length)
 
 concatCars :: Ord a => Map Coord [a] -> Set a
 concatCars = S.fromList . M.foldr' (<>) []
 
 lastCarCoord :: Map Coord [Car] -> Maybe Coord
-lastCarCoord m =
-    case M.toList m of
-        [(c, _)] -> Just c
-        _        -> Nothing
+lastCarCoord m = case M.toList m of
+  [(c, _)] -> Just c
+  _        -> Nothing
 
 moveCar :: Map Coord Track -> Car -> Car
-moveCar t (Car (x,y) n U) =
-    case M.lookup (x, y-1) t of
-        Just Vertical -> Car (x, y-1) n U
-        Just Backslash -> Car (x, y-1) n L
-        Just Forwardslash -> Car (x, y-1) n R
-        Just Intersection -> Car (x, y-1) (nextTurn n) (makeTurn n U)
-        _ -> error "the track and the car are in a fucked up state"
-moveCar t (Car (x,y) n D) =
-    case M.lookup (x, y+1) t of
-        Just Vertical -> Car (x, y+1) n D
-        Just Backslash -> Car (x, y+1) n R
-        Just Forwardslash -> Car (x, y+1) n L
-        Just Intersection -> Car (x, y+1) (nextTurn n) (makeTurn n D)
-        _ -> error "the track and the car are in a fucked up state"
-moveCar t (Car (x,y) n L) =
-    case M.lookup (x-1, y) t of
-        Just Horizontal -> Car (x-1, y) n L
-        Just Backslash -> Car (x-1, y) n U
-        Just Forwardslash -> Car (x-1, y) n D
-        Just Intersection -> Car (x-1, y) (nextTurn n) (makeTurn n L)
-        _ -> error "the track and the car are in a fucked up state"
-moveCar t (Car (x,y) n R) =
-    case M.lookup (x+1, y) t of
-        Just Horizontal -> Car (x+1, y) n R
-        Just Backslash -> Car (x+1, y) n D
-        Just Forwardslash -> Car (x+1, y) n U
-        Just Intersection -> Car (x+1, y) (nextTurn n) (makeTurn n R)
-        _ -> error "the track and the car are in a fucked up state"
+moveCar t (Car (x, y) n U) = case M.lookup (x, y - 1) t of
+  Just Vertical     -> Car (x, y - 1) n U
+  Just Backslash    -> Car (x, y - 1) n L
+  Just Forwardslash -> Car (x, y - 1) n R
+  Just Intersection -> Car (x, y - 1) (nextTurn n) (makeTurn n U)
+  _                 -> error "the track and the car are in a fucked up state"
+moveCar t (Car (x, y) n D) = case M.lookup (x, y + 1) t of
+  Just Vertical     -> Car (x, y + 1) n D
+  Just Backslash    -> Car (x, y + 1) n R
+  Just Forwardslash -> Car (x, y + 1) n L
+  Just Intersection -> Car (x, y + 1) (nextTurn n) (makeTurn n D)
+  _                 -> error "the track and the car are in a fucked up state"
+moveCar t (Car (x, y) n L) = case M.lookup (x - 1, y) t of
+  Just Horizontal   -> Car (x - 1, y) n L
+  Just Backslash    -> Car (x - 1, y) n U
+  Just Forwardslash -> Car (x - 1, y) n D
+  Just Intersection -> Car (x - 1, y) (nextTurn n) (makeTurn n L)
+  _                 -> error "the track and the car are in a fucked up state"
+moveCar t (Car (x, y) n R) = case M.lookup (x + 1, y) t of
+  Just Horizontal   -> Car (x + 1, y) n R
+  Just Backslash    -> Car (x + 1, y) n D
+  Just Forwardslash -> Car (x + 1, y) n U
+  Just Intersection -> Car (x + 1, y) (nextTurn n) (makeTurn n R)
+  _                 -> error "the track and the car are in a fucked up state"
 
 makeTurn :: NextTurn -> Direction -> Direction
-makeTurn TurnLeft U   = L
-makeTurn TurnLeft D   = R
-makeTurn TurnLeft L   = D
-makeTurn TurnLeft R   = U
-makeTurn TurnRight U  = R
-makeTurn TurnRight D  = L
-makeTurn TurnRight L  = U
-makeTurn TurnRight R  = D
+makeTurn TurnLeft   U = L
+makeTurn TurnLeft   D = R
+makeTurn TurnLeft   L = D
+makeTurn TurnLeft   R = U
+makeTurn TurnRight  U = R
+makeTurn TurnRight  D = L
+makeTurn TurnRight  L = U
+makeTurn TurnRight  R = D
 makeTurn GoStraight d = d
 
 nextTurn :: NextTurn -> NextTurn
