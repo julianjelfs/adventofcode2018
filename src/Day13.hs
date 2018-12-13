@@ -41,6 +41,8 @@ solution =
 
 eventLoop :: State -> Maybe Coord
 eventLoop State {..} =
+    --the problem is that we may have two cars like this "---><---"
+    --that will become "---<>---" and will not be detected as a collision
     let updatedCars =
             L.foldl'
                 (\cars' car ->
