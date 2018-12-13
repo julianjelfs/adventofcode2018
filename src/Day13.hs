@@ -41,6 +41,12 @@ solution =
 
 eventLoop :: State -> Maybe Coord
 eventLoop State {..} =
+    --list of cars mapped to a list of moved cars. Process the moved list and
+    --gather any car that is in the same position as any other car
+    --gather any car that has swapped position with any other car
+    --remove the gathered cars
+    --
+    --
     --the problem is that we may have two cars like this "---><---"
     --that will become "---<>---" and will not be detected as a collision
     let updatedCars =
