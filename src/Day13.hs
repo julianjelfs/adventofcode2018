@@ -49,10 +49,16 @@ eventLoop State {..} =
                         Nothing -> M.insert c' [car'] cars'
                         Just _  -> M.update (\l -> Just $ car' : l) c' cars'
                 ) M.empty (L.sort $ S.toList cars)
-        deduped = M.filter (\l -> L.length l == 1) updatedCars
+        deduped = dedupeCars updatedCars
     in case M.size deduped of
             1 -> lastCarCoord deduped
-            _ -> eventLoop (State { cars = S.fromList $ M.foldr' (<>) [] deduped, ..})
+            _ -> eventLoop (State { cars = concatCars deduped, ..})
+
+dedupeCars :: Map Coord [a] -> Map Coord [a]
+dedupeCars = M.filter (\cars -> L.length cars == 1)
+
+concatCars :: Ord a => Map Coord [a] -> Set a
+concatCars = S.fromList . M.foldr' (<>) []
 
 lastCarCoord :: Map Coord [Car] -> Maybe Coord
 lastCarCoord m =
