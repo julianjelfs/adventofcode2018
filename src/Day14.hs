@@ -1,31 +1,40 @@
 module Day14 where
 
-import           Data.Sequence                  ( Seq
-                                                , (><)
-                                                )
-import qualified Data.Sequence                 as S
+import qualified Data.List.Extra as L
+--import           Debug.Trace     (traceShowId)
 
-solution :: Int -> Seq Int
-solution n =
-  S.take 10 . S.drop n $ makeRecipes (n + 10) (0, 1, S.fromList [3, 7])
+-- solution :: Int -> (Seq Int, Int)
+-- solution n =
+--   (partOne, 0)
+--   where
+--     _input = [5,1,5,8,9]
 
+--     partOne = S.take 10 . S.drop n $ makeRecipesUntil (\s -> S.length s >= (n + 10)) initial
+--
+--  probably we want to build this in reverse order
 
-makeRecipes :: Int -> (Int, Int, Seq Int) -> Seq Int
-makeRecipes target (e1, e2, recipes) =
-  let e1Recipe  = S.index recipes e1
-      e2Recipe  = S.index recipes e2
+initial :: (Int, Int, [Int])
+initial = (0,1,[3,7])
+
+partTwo :: [Int] -> Int
+partTwo input = length . drop (length input) $ makeRecipesUntil input initial
+
+makeRecipesUntil :: [Int] -> (Int, Int, [Int]) -> [Int]
+makeRecipesUntil input (e1, e2, recipes) =
+  let e1Recipe  = recipes !! e1
+      e2Recipe  = recipes !! e2
       newRecipe = splitDigits $ e1Recipe + e2Recipe
-      recipes'  = recipes >< newRecipe
-      l         = S.length recipes'
-  in  if l >= target
-        then recipes'
-        else makeRecipes
-          target
-          (newIndex e1 e1Recipe l, newIndex e2 e2Recipe l, recipes')
+      recipes'  = recipes <> newRecipe
+      l         = length recipes'
+      nextParam = (newIndex e1 e1Recipe l, newIndex e2 e2Recipe l, recipes')
+
+  in if L.takeEnd (length input) recipes'  == input
+     then recipes'
+     else makeRecipesUntil input nextParam
 
 newIndex :: Int -> Int -> Int -> Int
 newIndex c i l = (c + i + 1) `mod` l
 
-splitDigits :: Int -> Seq Int
-splitDigits i | i < 10    = S.singleton i
-              | otherwise = S.fromList [i `div` 10, i `rem` 10]
+splitDigits :: Int -> [Int]
+splitDigits i | i < 10    = [i]
+              | otherwise = [i `div` 10, i `rem` 10]

@@ -49,3 +49,4 @@ executable adventofcode2018
                       , text
                       , pointedlist
                       , MissingH
+                      , extra
