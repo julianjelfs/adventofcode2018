@@ -51,3 +51,4 @@ executable adventofcode2018
                       , pointedlist
                       , MissingH
                       , extra
+                      , hspec
