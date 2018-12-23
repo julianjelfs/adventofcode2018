@@ -5,6 +5,7 @@ module Day15 where
 import qualified Data.List                     as L
 import qualified Data.Map                      as M
 import qualified Data.Set                      as S
+--import           Debug.Trace                    ( traceShowId )
 import qualified Test.Hspec                    as Test
 
 newtype AttackPower = AttackPower Int deriving (Show, Eq, Ord)
@@ -66,27 +67,36 @@ move g destinations unit =
 
 
 shortestPath :: Grid -> Pair -> Pair -> (Int, Pair, Path)
-shortestPath _g _unit _destination = undefined
-    -- foreach child create a new path
+shortestPath g unit destination =
+  let paths       = allPaths [] S.empty g unit destination
+      mappedPaths = (\p -> (length p, destination, p)) <$> paths
+  in  case L.sortBy comparePaths mappedPaths of
+        (shortest : _) -> shortest
+        _              -> error "we couldn't find the shorted path"
 
-search :: Path -> S.Set Coord -> Grid -> Pair -> Pair -> Path
-search path visited g to from@(c, _) = if to == from
-  then path
-  else
-    let path'    = path <> [from]
-        visited' = S.insert c visited
-        subPaths = search path' visited' g to <$> nextSteps
-    in  shortest subPaths
- where
-  shortest :: [Path] -> Path
-  shortest = L.minimumBy (\a b -> length a `compare` length b)
 
-  nextSteps :: [Pair]
-  nextSteps = L.filter (not . alreadySeen) $ availableAdjacentCells g from
+allPaths :: Path -> S.Set Coord -> Grid -> Pair -> Pair -> [Path]
+allPaths path visited g to from@(c, _)
+  | alreadySeen visited from
+  = []
+  | to == from
+  = [path]
+  | otherwise
+  = let visited' = S.insert c visited
+    in  case validAdjacentCells g to from of
+          [] -> [] -- ran out of options before we arrived
+          next ->
+            concat $ (\f -> allPaths (path <> [f]) visited' g to f) <$> next
 
-  alreadySeen :: Pair -> Bool
-  alreadySeen (c, _) = S.member c visited
 
+validAdjacentCells :: Grid -> Pair -> Pair -> [Pair]
+validAdjacentCells g to = L.filter (validNextStep to) . adjacentCells g
+
+validNextStep :: Pair -> Pair -> Bool
+validNextStep to p = p == to || isSpace p
+
+alreadySeen :: S.Set Coord -> Pair -> Bool
+alreadySeen visited (c, _) = S.member c visited
 
 comparePaths :: (Int, Pair, Path) -> (Int, Pair, Path) -> Ordering
 comparePaths (l, d, p) (l', d', p') = case compare l l' of
@@ -130,6 +140,10 @@ isSpace (_, Space) = True
 isSpace _          = False
 
 
+isWall :: Pair -> Bool
+isWall (_, Wall) = True
+isWall _         = False
+
 adjacentCells :: Grid -> Pair -> [Pair]
 adjacentCells grid ((y, x), _) = foldr
   (\c' cells -> case dolookup c' of
@@ -149,6 +163,7 @@ allAvailableAdjacentCells g targets =
 
 availableAdjacentCells :: Grid -> Pair -> [Pair]
 availableAdjacentCells g = L.filter isSpace . adjacentCells g
+
 
 
 parseCell :: Char -> Cell
@@ -265,6 +280,42 @@ runTests = Test.hspec $ Test.describe "Day15 tests" $ do
     $ let p1 = (2, ((2, 2), Space), [((1, 5), Space)])
           p2 = (2, ((2, 2), Space), [((1, 5), Space)])
       in  comparePaths p1 p2 `Test.shouldBe` EQ
+
+  Test.describe "Path finding" $ do
+    let g  = grid ["E.", ".G"]
+        to = ((1, 1), Unit (Goblin (AttackPower 3) (HitPoints 200)))
+
+    Test.it "should find the correct next steps"
+      $ let from  = ((0, 1), Space)
+            cells = validAdjacentCells g to from
+        in  case cells of
+              [x] -> x `Test.shouldBe` to
+              _   -> error "wrong number of next steps returned"
+
+    Test.it "should find multiple next steps"
+      $ let from  = ((0, 0), Unit (Elf (AttackPower 3) (HitPoints 200)))
+            cells = validAdjacentCells g to from
+        in  case cells of
+              [x, y] -> do
+                x `Test.shouldBe` ((0, 1), Space)
+                y `Test.shouldBe` ((1, 0), Space)
+              _ -> error "wrong number of next steps returned"
+
+    Test.it "basic path finding should work"
+      $ let from  = ((0, 0), Unit (Elf (AttackPower 3) (HitPoints 200)))
+            paths = allPaths [] S.empty g to from
+        in  length paths `Test.shouldBe` (2 :: Int)
+
+    Test.it "should be possible to find the shortest path"
+      $ let from         = ((0, 0), Unit (Elf (AttackPower 3) (HitPoints 200)))
+            (l, d, path) = shortestPath g from to
+        in  do
+              l `Test.shouldBe` (2 :: Int)
+              d `Test.shouldBe` to
+              case path of
+                (firstStep : _) -> firstStep `Test.shouldBe` ((0, 1), Space)
+                _ -> error "shortest path should have a first step"
+
 
 
 --comparePaths :: (Int, Pair, Path) -> (Int, Pair, Path) -> Ordering
