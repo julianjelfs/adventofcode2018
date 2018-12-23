@@ -5,7 +5,7 @@ module Day15 where
 import qualified Data.List                     as L
 import qualified Data.Map                      as M
 import qualified Data.Set                      as S
---import           Debug.Trace                    ( traceShowId )
+import           Debug.Trace                    ( traceShowId )
 import qualified Test.Hspec                    as Test
 
 newtype AttackPower = AttackPower Int deriving (Show, Eq, Ord)
@@ -54,17 +54,21 @@ takeATurn unit@(_, Unit _combatant) g@(gridToList -> listGrid) =
       [] -> (True, g) -- This is game over
       ts -> case allAvailableAdjacentCells g ts of
         []          -> (False, g) -- there are targets but none of them have adjacent free cells
-        targetCells -> (False, move g targetCells unit)
+        targetCells -> (False, findMove g targetCells unit)
 takeATurn _ _ = error "non-combatants should not be taking turns"
 
 
-move :: Grid -> [Pair] -> Pair -> Grid
-move g destinations unit =
+findMove :: Grid -> [Pair] -> Pair -> Grid
+findMove g destinations unit =
   let paths = L.sortBy comparePaths $ shortestPath g unit <$> destinations
   in  case paths of
-        ((_, _, _firstStep : _) : _) -> undefined --move to h
-        _                            -> error "we didn't find a move to make"
+        ((_, _, to : _) : _) -> move g unit to
+        _                    -> error "we didn't find a move to make"
 
+move :: Grid -> Pair -> Pair -> Grid
+move g (k, v) (k', _) =
+  let deleted = M.delete k' $ M.delete k g
+  in  M.insert k Space $ M.insert k' v deleted
 
 shortestPath :: Grid -> Pair -> Pair -> (Int, Pair, Path)
 shortestPath g unit destination =
@@ -130,17 +134,13 @@ adjacentTargets :: Grid -> Pair -> [Pair]
 adjacentTargets g c = L.filter (isTargetOf c) $ adjacentCells g c
 
 
-isUnit :: Pair -> Bool
+isUnit, isSpace, isWall :: Pair -> Bool
 isUnit (_, Unit _) = True
 isUnit _           = False
 
-
-isSpace :: Pair -> Bool
 isSpace (_, Space) = True
 isSpace _          = False
 
-
-isWall :: Pair -> Bool
 isWall (_, Wall) = True
 isWall _         = False
 
@@ -165,7 +165,6 @@ availableAdjacentCells :: Grid -> Pair -> [Pair]
 availableAdjacentCells g = L.filter isSpace . adjacentCells g
 
 
-
 parseCell :: Char -> Cell
 parseCell = \case
   '#' -> Wall
@@ -180,141 +179,185 @@ testGrid = grid ["#######", "#E..G.#", "#...#.#", "#.G.#G#", "#######"]
 
 --honestly feel like we need tests for this one
 runTests :: IO ()
-runTests = Test.hspec $ Test.describe "Day15 tests" $ do
-  let u = units testGrid
+runTests =
+  Test.hspec
+    $ Test.describe "Day15 tests"
+    $ do
+        let u      = units testGrid
+            elf    = Unit (Elf (AttackPower 3) (HitPoints 200))
+            goblin = Unit (Goblin (AttackPower 3) (HitPoints 200))
 
-  Test.it "is possible to get the list of units from the grid"
-    $               L.length u
-    `Test.shouldBe` (4 :: Int)
+        Test.it "is possible to get the list of units from the grid"
+          $               L.length u
+          `Test.shouldBe` (4 :: Int)
 
-  Test.it "units should be in the right order" $ case u of
-    [(c1, _), (c2, _), (c3, _), (c4, _)] -> do
-      c1 `Test.shouldBe` ((1, 1) :: (Int, Int))
-      c2 `Test.shouldBe` ((1, 4) :: (Int, Int))
-      c3 `Test.shouldBe` ((3, 2) :: (Int, Int))
-      c4 `Test.shouldBe` ((3, 5) :: (Int, Int))
-    _ -> undefined
+        Test.it "units should be in the right order" $ case u of
+          [(c1, _), (c2, _), (c3, _), (c4, _)] -> do
+            c1 `Test.shouldBe` ((1, 1) :: (Int, Int))
+            c2 `Test.shouldBe` ((1, 4) :: (Int, Int))
+            c3 `Test.shouldBe` ((3, 2) :: (Int, Int))
+            c4 `Test.shouldBe` ((3, 5) :: (Int, Int))
+          _ -> undefined
 
-  Test.it "can get targets from units" $ case u of
-    (c1 : _) -> L.length (targets c1 u) `Test.shouldBe` (3 :: Int)
-    _        -> undefined
+        Test.it "can get targets from units" $ case u of
+          (c1 : _) -> L.length (targets c1 u) `Test.shouldBe` (3 :: Int)
+          _        -> undefined
 
-  Test.it "targets should only include opposite combatants" $ case u of
-    (_ : c1 : _) -> L.length (targets c1 u) `Test.shouldBe` (1 :: Int)
-    _            -> undefined
+        Test.it "targets should only include opposite combatants" $ case u of
+          (_ : c1 : _) -> L.length (targets c1 u) `Test.shouldBe` (1 :: Int)
+          _            -> undefined
 
-  Test.it "should correctly tell us if a cell is a unit"
-    $ case M.lookup (1, 1) testGrid of
-        Just c  -> isUnit ((1, 1), c) `Test.shouldBe` True
-        Nothing -> undefined
+        Test.it "should correctly tell us if a cell is a unit"
+          $ case M.lookup (1, 1) testGrid of
+              Just c  -> isUnit ((1, 1), c) `Test.shouldBe` True
+              Nothing -> undefined
 
-  Test.it "should correctly tell us if a cell is a space"
-    $ case M.lookup (1, 2) testGrid of
-        Just c  -> isSpace ((1, 2), c) `Test.shouldBe` True
-        Nothing -> undefined
+        Test.it "should correctly tell us if a cell is a space"
+          $ case M.lookup (1, 2) testGrid of
+              Just c  -> isSpace ((1, 2), c) `Test.shouldBe` True
+              Nothing -> undefined
 
-  Test.it "should give us available surrounding cells for a cell"
-    $ let surrounding = availableAdjacentCells testGrid ((3, 2), Space)
-      in  case surrounding of
-            [(c1, _), (c2, _), (c3, _)] -> do
-              c1 `Test.shouldBe` ((2, 2) :: (Int, Int))
-              c2 `Test.shouldBe` ((3, 1) :: (Int, Int))
-              c3 `Test.shouldBe` ((3, 3) :: (Int, Int))
-            _ -> error "we didn't get the number of results that we expected"
+        Test.it "should give us available surrounding cells for a cell"
+          $ let surrounding = availableAdjacentCells testGrid ((3, 2), Space)
+            in  case surrounding of
+                  [(c1, _), (c2, _), (c3, _)] -> do
+                    c1 `Test.shouldBe` ((2, 2) :: (Int, Int))
+                    c2 `Test.shouldBe` ((3, 1) :: (Int, Int))
+                    c3 `Test.shouldBe` ((3, 3) :: (Int, Int))
+                  _ -> error
+                    "we didn't get the number of results that we expected"
 
-  Test.it "should give ud any adjacent targets in the right order"
-    $ let g = grid ["#G#####", "#EG.G.#"]
-          e = Unit (Elf (AttackPower 0) (HitPoints 0))
-          t = adjacentTargets g ((1, 1), e)
-      in  case t of
-            [(c1, Unit (Goblin _ _)), (c2, Unit (Goblin _ _))] -> do
-              c1 `Test.shouldBe` ((0, 1) :: (Int, Int))
-              c2 `Test.shouldBe` ((1, 2) :: (Int, Int))
-            _ -> error "we didn't get the number of results that we expected"
+        Test.it "should give ud any adjacent targets in the right order"
+          $ let g = grid ["#G#####", "#EG.G.#"]
+                e = Unit (Elf (AttackPower 0) (HitPoints 0))
+                t = adjacentTargets g ((1, 1), e)
+            in  case t of
+                  [(c1, Unit (Goblin _ _)), (c2, Unit (Goblin _ _))] -> do
+                    c1 `Test.shouldBe` ((0, 1) :: (Int, Int))
+                    c2 `Test.shouldBe` ((1, 2) :: (Int, Int))
+                  _ -> error
+                    "we didn't get the number of results that we expected"
 
-  Test.it "should give us any adjacent cells in the right order"
-    $ let g = grid ["#G#####", "#EG.G.#"]
-          e = Unit (Elf (AttackPower 0) (HitPoints 0))
-          t = adjacentCells g ((1, 1), e)
-      in  case t of
-            [(c1, Unit (Goblin _ _)), (c2, Wall), (c3, Unit (Goblin _ _))] ->
-              do
-                c1 `Test.shouldBe` ((0, 1) :: (Int, Int))
-                c2 `Test.shouldBe` ((1, 0) :: (Int, Int))
-                c3 `Test.shouldBe` ((1, 2) :: (Int, Int))
-            _ -> error "we didn't get the number of results that we expected"
+        Test.it "should give us any adjacent cells in the right order"
+          $ let g = grid ["#G#####", "#EG.G.#"]
+                t = adjacentCells g ((1, 1), elf)
+            in  case t of
+                  [(c1, Unit (Goblin _ _)), (c2, Wall), (c3, Unit (Goblin _ _))]
+                    -> do
+                      c1 `Test.shouldBe` ((0, 1) :: (Int, Int))
+                      c2 `Test.shouldBe` ((1, 0) :: (Int, Int))
+                      c3 `Test.shouldBe` ((1, 2) :: (Int, Int))
+                  _ -> error
+                    "we didn't get the number of results that we expected"
 
-  Test.it "should give us *all* available adjacent cells given multiple targets"
-    $ let
-        e     = Unit (Elf (AttackPower 0) (HitPoints 0))
-        ts    = targets ((1, 1), e) (gridToList testGrid)
-        cells = allAvailableAdjacentCells testGrid ts
-      in
-        case cells of
-          [(c1, Space), (c2, Space), (c3, Space), (c4, Space), (c5, Space), (c6, Space)]
-            -> do
-              c1 `Test.shouldBe` ((1, 3) :: (Int, Int))
-              c2 `Test.shouldBe` ((1, 5) :: (Int, Int))
-              c3 `Test.shouldBe` ((2, 2) :: (Int, Int))
-              c4 `Test.shouldBe` ((2, 5) :: (Int, Int))
-              c5 `Test.shouldBe` ((3, 1) :: (Int, Int))
-              c6 `Test.shouldBe` ((3, 3) :: (Int, Int))
-          _ -> error "we didn't get the number of results that we expected"
+        Test.it
+            "should give us *all* available adjacent cells given multiple targets"
+          $ let
+              ts    = targets ((1, 1), elf) (gridToList testGrid)
+              cells = allAvailableAdjacentCells testGrid ts
+            in
+              case cells of
+                [(c1, Space), (c2, Space), (c3, Space), (c4, Space), (c5, Space), (c6, Space)]
+                  -> do
+                    c1 `Test.shouldBe` ((1, 3) :: (Int, Int))
+                    c2 `Test.shouldBe` ((1, 5) :: (Int, Int))
+                    c3 `Test.shouldBe` ((2, 2) :: (Int, Int))
+                    c4 `Test.shouldBe` ((2, 5) :: (Int, Int))
+                    c5 `Test.shouldBe` ((3, 1) :: (Int, Int))
+                    c6 `Test.shouldBe` ((3, 3) :: (Int, Int))
+                _ ->
+                  error "we didn't get the number of results that we expected"
 
-  Test.it "should compare paths correctly by length"
-    $ let p1 = (1, ((1, 2), Space), [((1, 2), Space)])
-          p2 = (2, ((1, 2), Space), [((1, 2), Space)])
-      in  comparePaths p1 p2 `Test.shouldBe` LT
+        Test.it "should compare paths correctly by length"
+          $ let p1 = (1, ((1, 2), Space), [((1, 2), Space)])
+                p2 = (2, ((1, 2), Space), [((1, 2), Space)])
+            in  comparePaths p1 p2 `Test.shouldBe` LT
 
-  Test.it "should compare paths correctly by destination order"
-    $ let p1 = (2, ((2, 2), Space), [((2, 2), Space)])
-          p2 = (2, ((1, 2), Space), [((1, 2), Space)])
-      in  comparePaths p1 p2 `Test.shouldBe` GT
+        Test.it "should compare paths correctly by destination order"
+          $ let p1 = (2, ((2, 2), Space), [((2, 2), Space)])
+                p2 = (2, ((1, 2), Space), [((1, 2), Space)])
+            in  comparePaths p1 p2 `Test.shouldBe` GT
 
-  Test.it "should compare paths correctly by first step"
-    $ let p1 = (2, ((2, 2), Space), [((1, 2), Space)])
-          p2 = (2, ((2, 2), Space), [((1, 5), Space)])
-      in  comparePaths p1 p2 `Test.shouldBe` LT
+        Test.it "should compare paths correctly by first step"
+          $ let p1 = (2, ((2, 2), Space), [((1, 2), Space)])
+                p2 = (2, ((2, 2), Space), [((1, 5), Space)])
+            in  comparePaths p1 p2 `Test.shouldBe` LT
 
-  Test.it "should detect equal paths (though this should not happen)"
-    $ let p1 = (2, ((2, 2), Space), [((1, 5), Space)])
-          p2 = (2, ((2, 2), Space), [((1, 5), Space)])
-      in  comparePaths p1 p2 `Test.shouldBe` EQ
+        Test.it "should detect equal paths (though this should not happen)"
+          $ let p1 = (2, ((2, 2), Space), [((1, 5), Space)])
+                p2 = (2, ((2, 2), Space), [((1, 5), Space)])
+            in  comparePaths p1 p2 `Test.shouldBe` EQ
 
-  Test.describe "Path finding" $ do
-    let g  = grid ["E.", ".G"]
-        to = ((1, 1), Unit (Goblin (AttackPower 3) (HitPoints 200)))
+        Test.it "can move a unit and leave the grid in the right state"
+          $ let g    = grid ["E.", ".G"]
+                from = ((0, 0), elf)
+                to   = ((0, 1), Space)
+                g'   = move g from to
+            in  do
+                  M.lookup (0, 1) g' `Test.shouldBe` Just elf
+                  M.lookup (0, 0) g' `Test.shouldBe` Just Space
 
-    Test.it "should find the correct next steps"
-      $ let from  = ((0, 1), Space)
-            cells = validAdjacentCells g to from
-        in  case cells of
-              [x] -> x `Test.shouldBe` to
-              _   -> error "wrong number of next steps returned"
+        Test.describe "Path finding" $ do
+          let g  = grid ["E.", ".G"]
+              to = ((1, 1), goblin)
 
-    Test.it "should find multiple next steps"
-      $ let from  = ((0, 0), Unit (Elf (AttackPower 3) (HitPoints 200)))
-            cells = validAdjacentCells g to from
-        in  case cells of
-              [x, y] -> do
-                x `Test.shouldBe` ((0, 1), Space)
-                y `Test.shouldBe` ((1, 0), Space)
-              _ -> error "wrong number of next steps returned"
+          Test.it "should find the correct next steps"
+            $ let from  = ((0, 1), Space)
+                  cells = validAdjacentCells g to from
+              in  case cells of
+                    [x] -> x `Test.shouldBe` to
+                    _   -> error "wrong number of next steps returned"
 
-    Test.it "basic path finding should work"
-      $ let from  = ((0, 0), Unit (Elf (AttackPower 3) (HitPoints 200)))
-            paths = allPaths [] S.empty g to from
-        in  length paths `Test.shouldBe` (2 :: Int)
+          Test.it "should find multiple next steps"
+            $ let from  = ((0, 0), elf)
+                  cells = validAdjacentCells g to from
+              in  case cells of
+                    [x, y] -> do
+                      x `Test.shouldBe` ((0, 1), Space)
+                      y `Test.shouldBe` ((1, 0), Space)
+                    _ -> error "wrong number of next steps returned"
 
-    Test.it "should be possible to find the shortest path"
-      $ let from         = ((0, 0), Unit (Elf (AttackPower 3) (HitPoints 200)))
-            (l, d, path) = shortestPath g from to
-        in  do
-              l `Test.shouldBe` (2 :: Int)
-              d `Test.shouldBe` to
-              case path of
-                (firstStep : _) -> firstStep `Test.shouldBe` ((0, 1), Space)
-                _ -> error "shortest path should have a first step"
+          Test.it "basic path finding should work"
+            $ let from  = ((0, 0), elf)
+                  paths = allPaths [] S.empty g to from
+              in  length paths `Test.shouldBe` (2 :: Int)
+
+          Test.it "should be possible to find the shortest path"
+            $ let from         = ((0, 0), elf)
+                  (l, d, path) = shortestPath g from to
+              in  do
+                    l `Test.shouldBe` (2 :: Int)
+                    d `Test.shouldBe` to
+                    case path of
+                      (firstStep : _) ->
+                        firstStep `Test.shouldBe` ((0, 1), Space)
+                      _ -> error "shortest path should have a first step"
+
+        Test.describe "A slightly larger example grid" $ do
+          let g = grid ["#######", "#.E...#", "#.....#", "#...G.#", "#######"]
+
+          Test.xit "should select and mave the correct move"
+            $ let e   = ((1, 2), elf)
+                  gob = ((3, 4), goblin)
+                  g'  = traceShowId $ findMove g [gob] e
+              in  do
+                    -- the elf has actually moved to (2,4) so needs investigation
+                    M.lookup (1, 3) g' `Test.shouldBe` Just elf
+                    M.lookup (1, 2) g' `Test.shouldBe` Just Space
+
+          -- this gives completely the wrong path. The first step is to (2,4)
+          -- which is not even within one move. But at least I know about it.
+          Test.xit "should find the correct shortest path"
+            $ let from         = ((1, 2), elf)
+                  to           = ((3, 4), goblin)
+                  (l, d, path) = traceShowId $ shortestPath g from to
+              in  do
+                    l `Test.shouldBe` (2 :: Int)
+                    d `Test.shouldBe` to
+                    case path of
+                      (firstStep : _) ->
+                        firstStep `Test.shouldBe` ((0, 1), Space)
+                      _ -> error "shortest path should have a first step"
 
 
 
