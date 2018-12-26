@@ -3,4 +3,4 @@ module Main where
 import           Day15
 
 main :: IO ()
-main = Day15.runTests
+main = Day15.solution >>= print . show

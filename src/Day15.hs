@@ -4,6 +4,7 @@ module Day15 where
 
 import qualified Data.List                     as L
 import qualified Data.Map                      as M
+import           Data.Maybe                     ( catMaybes )
 import qualified Data.Set                      as S
 --import           Debug.Trace                    ( traceShowId )
 import qualified Test.Hspec                    as Test
@@ -31,7 +32,7 @@ type Path = [Pair]
 
 type Grid = M.Map Coord Cell
 
-solution :: IO Int
+solution :: IO (Int, Int)
 solution = do
   g <- grid . lines <$> readFile "data/day15.txt"
   pure $ playGame 0 g
@@ -46,10 +47,10 @@ grid rows = L.foldl'
   M.empty
   (zip [0 ..] rows)
 
-playGame :: Int -> Grid -> Int
-playGame rounds g = case runARound (False, g) of
+playGame :: Int -> Grid -> (Int, Int)
+playGame rounds g = case runARound g of
   (False, g') -> playGame (rounds + 1) g'
-  (True , g') -> rounds * sumHitPoints g'
+  (True , g') -> (rounds, sumHitPoints g')
 
 sumHitPoints :: Grid -> Int
 sumHitPoints = M.foldr
@@ -60,10 +61,10 @@ sumHitPoints = M.foldr
   )
   0
 
-runARound :: (Bool, Grid) -> (Bool, Grid)
-runARound (c, g) = L.foldl'
+runARound :: Grid -> (Bool, Grid)
+runARound g = L.foldl'
   (\(complete, g') u -> if complete then (complete, g') else takeATurn u g')
-  (c, g)
+  (False, g)
   (units g)
 
 takeATurn :: Pair -> Grid -> (Bool, Grid)
@@ -121,23 +122,34 @@ compareCombatants _ _ = EQ
 
 findMove :: Grid -> [Pair] -> Pair -> Grid
 findMove g destinations unit =
-  let paths = L.sortBy comparePaths $ shortestPath g unit <$> destinations
+  let paths =
+        L.sortBy comparePaths . catMaybes $ shortestPath g unit <$> destinations
   in  case paths of
         ((_, _, to : _) : _) -> move g unit to
+        []                   -> g
         _                    -> error "we didn't find a move to make"
 
 move :: Grid -> Pair -> Pair -> Grid
 move g (k, v) (k', _) =
-  let deleted = M.delete k' $ M.delete k g
-  in  M.insert k Space $ M.insert k' v deleted
+  let newUnit  = (k', v)
+      deleted  = M.delete k' $ M.delete k g
+      inserted = M.insert k Space $ M.insert k' v deleted
+  in  case adjacentTargets inserted newUnit of
+        []  -> inserted
+        adj -> snd $ attack newUnit adj inserted
 
-shortestPath :: Grid -> Pair -> Pair -> (Int, Pair, Path)
+-- this is doing a depth first search which is the wrong choice here. Should be
+-- BFS which should be a lot faster.
+--
+-- don't forget that we actually might not find a path to all destinations
+-- because it could be marooned. That's fine.
+shortestPath :: Grid -> Pair -> Pair -> Maybe (Int, Pair, Path)
 shortestPath g unit destination =
   let paths       = allPaths [] S.empty g destination unit
       mappedPaths = (\p -> (length p, destination, p)) <$> paths
   in  case L.sortBy comparePaths mappedPaths of
-        (shortest : _) -> shortest
-        _              -> error "we couldn't find the shorted path"
+        (shortest : _) -> Just shortest
+        []             -> Nothing
 
 
 allPaths :: Path -> S.Set Coord -> Grid -> Pair -> Pair -> [Path]
@@ -359,50 +371,81 @@ runTests =
                   M.lookup (0, 0) g' `Test.shouldBe` Just Space
 
         -- this test fails at the moment
-        Test.describe "Run the whole simulation" $ do
-          let g = grid
-                [ "#######"
-                , "#.G...#"
-                , "#...EG#"
-                , "#.#.#G#"
-                , "#..G#E#"
-                , "#.....#"
-                , "#######"
-                ]
+        Test.describe "Whole simulation" $ do
 
-          Test.it "should give us the correct score"
-            $               playGame 0 g
-            `Test.shouldBe` (27730 :: Int)
+          Test.it "test grid one"
+            $ let g = grid
+                    [ "#######"
+                    , "#.G...#"
+                    , "#...EG#"
+                    , "#.#.#G#"
+                    , "#..G#E#"
+                    , "#.....#"
+                    , "#######"
+                    ]
+              in  playGame 0 g `Test.shouldBe` (47 :: Int, 590 :: Int)
 
-        Test.xdescribe "Running a whole round" $ do
-          let g = grid
-                [ "#########"
-                , "#G..G..G#"
-                , "#.......#"
-                , "#.......#"
-                , "#G..E..G#"
-                , "#.......#"
-                , "#.......#"
-                , "#G..G..G#"
-                , "#########"
-                ]
-              expected = grid
-                [ "#########"
-                , "#.G...G.#"
-                , "#...G...#"
-                , "#...E..G#"
-                , "#.G.....#"
-                , "#.......#"
-                , "#G..G..G#"
-                , "#.......#"
-                , "#########"
-                ]
-              (complete, g') = runARound (False, g)
+          Test.it "test grid two"
+            $ let g = grid
+                    [ "#######"
+                    , "#G..#E#"
+                    , "#E#E.E#"
+                    , "#G.##.#"
+                    , "#...#E#"
+                    , "#...E.#"
+                    , "#######"
+                    ]
+              in  playGame 0 g `Test.shouldBe` (37 :: Int, 982 :: Int)
 
-          -- wow this test actually passes but takes a very long time to complete!
-          Test.it "should be in the correct state after one round" $ do
-            complete `Test.shouldBe` False
-            g' `Test.shouldBe` expected
+          Test.it "test grid three"
+            $ let g = grid
+                    [ "#######"
+                    , "#E..EG#"
+                    , "#.#G.E#"
+                    , "#E.##E#"
+                    , "#G..#.#"
+                    , "#..E#.#"
+                    , "#######"
+                    ]
+              in  playGame 0 g `Test.shouldBe` (46 :: Int, 859 :: Int)
+
+          Test.it "test grid four"
+            $ let g = grid
+                    [ "#######"
+                    , "#E.G#.#"
+                    , "#.#G..#"
+                    , "#G.#.G#"
+                    , "#G..#.#"
+                    , "#...E.#"
+                    , "#######"
+                    ]
+              in  playGame 0 g `Test.shouldBe` (35 :: Int, 793 :: Int)
+
+          Test.it "test grid five"
+            $ let g = grid
+                    [ "#######"
+                    , "#.E...#"
+                    , "#.#..G#"
+                    , "#.###.#"
+                    , "#E#G#G#"
+                    , "#...#G#"
+                    , "#######"
+                    ]
+              in  playGame 0 g `Test.shouldBe` (54 :: Int, 536 :: Int)
+
+          Test.it "test grid six"
+            $ let g = grid
+                    [ "#########"
+                    , "#G......#"
+                    , "#.E.#...#"
+                    , "#..##..G#"
+                    , "#...##..#"
+                    , "#...#...#"
+                    , "#.G...G.#"
+                    , "#.....G.#"
+                    , "#########"
+                    ]
+              in  playGame 0 g `Test.shouldBe` (20 :: Int, 937 :: Int)
 
         Test.describe "Path finding" $ do
           let g  = grid ["E.", ".G"]
@@ -474,17 +517,19 @@ runTests =
               in  length paths `Test.shouldBe` (72 :: Int)
 
           Test.it "should find the correct shortest path"
-            $ let (l, d, path) = shortestPath g from to
-              in  do
-                    l `Test.shouldBe` (4 :: Int)
-                    d `Test.shouldBe` to
-                    case path of
-                      [one, two, three, four] -> do
-                        one `Test.shouldBe` ((1, 3), Space)
-                        two `Test.shouldBe` ((1, 4), Space)
-                        three `Test.shouldBe` ((2, 4), Space)
-                        four `Test.shouldBe` to
-                      _ -> error "We should have got a four part path"
+            $ let p = shortestPath g from to
+              in  case p of
+                    Just (l, d, path) -> do
+                      l `Test.shouldBe` (4 :: Int)
+                      d `Test.shouldBe` to
+                      case path of
+                        [one, two, three, four] -> do
+                          one `Test.shouldBe` ((1, 3), Space)
+                          two `Test.shouldBe` ((1, 4), Space)
+                          three `Test.shouldBe` ((2, 4), Space)
+                          four `Test.shouldBe` to
+                        _ -> error "We should have got a four part path"
+                    Nothing -> error "we expected to get a shortest path"
 
           Test.it "should end in the correct state after taking a turn"
             $ let (complete, g') = takeATurn from g
