@@ -5,7 +5,7 @@ module Day15 where
 import qualified Data.List                     as L
 import qualified Data.Map                      as M
 import qualified Data.Set                      as S
-import           Debug.Trace                    ( traceShowId )
+--import           Debug.Trace                    ( traceShowId )
 import qualified Test.Hspec                    as Test
 
 newtype AttackPower = AttackPower Int deriving (Show, Eq, Ord)
@@ -46,16 +46,63 @@ grid rows = L.foldl'
   M.empty
   (zip [0 ..] rows)
 
+runARound :: (Bool, Grid) -> (Bool, Grid)
+runARound (c, g) = L.foldl'
+  (\(complete, g') u -> if complete then (complete, g') else takeATurn u g')
+  (c, g)
+  (units g)
+
 takeATurn :: Pair -> Grid -> (Bool, Grid)
 takeATurn unit@(_, Unit _combatant) g@(gridToList -> listGrid) =
   case adjacentTargets g unit of
-    (_t : _) -> undefined -- attack t
-    []       -> case targets unit listGrid of
+    [] -> case targets unit listGrid of
       [] -> (True, g) -- This is game over
       ts -> case allAvailableAdjacentCells g ts of
         []          -> (False, g) -- there are targets but none of them have adjacent free cells
         targetCells -> (False, findMove g targetCells unit)
+    adj -> attack unit adj g
 takeATurn _ _ = error "non-combatants should not be taking turns"
+
+attack :: Pair -> [Pair] -> Grid -> (Bool, Grid)
+attack unit (weakest -> w@(wc, _)) g =
+  let (_, attacked) = reduceHitPointsBy (extractAttackPower unit) w
+  in  (False, M.update (\_ -> Just attacked) wc g)
+
+reduceHitPointsBy :: Int -> Pair -> Pair
+reduceHitPointsBy n (c, Unit (Goblin ap (HitPoints x)))
+  | x - n <= 0 = (c, Space)
+  | otherwise  = (c, Unit (Goblin ap (HitPoints (x - n))))
+reduceHitPointsBy n (c, Unit (Elf ap (HitPoints x)))
+  | x - n <= 0 = (c, Space)
+  | otherwise  = (c, Unit (Elf ap (HitPoints (x - n))))
+reduceHitPointsBy _ p = p
+
+extractAttackPower :: Pair -> Int
+extractAttackPower (_, Unit (Goblin (AttackPower n) _)) = n
+extractAttackPower (_, Unit (Elf (AttackPower n) _)) = n
+extractAttackPower _ = 0
+
+extractHitPoints :: Pair -> Int
+extractHitPoints (_, Unit (Goblin _ (HitPoints n))) = n
+extractHitPoints (_, Unit (Elf _ (HitPoints n))) = n
+extractHitPoints _ = 0
+
+weakest :: [Pair] -> Pair
+weakest []    = error "can't find the weakest in an empty list"
+weakest units = L.minimumBy compareCombatants units
+
+compareCombatants :: Pair -> Pair -> Ordering
+compareCombatants (p1, Unit (Goblin _ (HitPoints a))) (p2, Unit (Goblin _ (HitPoints b)))
+  | a == b
+  = p1 `compare` p2
+  | otherwise
+  = a `compare` b
+compareCombatants (p1, Unit (Elf _ (HitPoints a))) (p2, Unit (Elf _ (HitPoints b)))
+  | a == b
+  = p1 `compare` p2
+  | otherwise
+  = a `compare` b
+compareCombatants _ _ = EQ
 
 
 findMove :: Grid -> [Pair] -> Pair -> Grid
@@ -72,7 +119,7 @@ move g (k, v) (k', _) =
 
 shortestPath :: Grid -> Pair -> Pair -> (Int, Pair, Path)
 shortestPath g unit destination =
-  let paths       = allPaths [] S.empty g unit destination
+  let paths       = allPaths [] S.empty g destination unit
       mappedPaths = (\p -> (length p, destination, p)) <$> paths
   in  case L.sortBy comparePaths mappedPaths of
         (shortest : _) -> shortest
@@ -297,6 +344,36 @@ runTests =
                   M.lookup (0, 1) g' `Test.shouldBe` Just elf
                   M.lookup (0, 0) g' `Test.shouldBe` Just Space
 
+        Test.describe "Running a whole round" $ do
+          let g = grid
+                [ "#########"
+                , "#G..G..G#"
+                , "#.......#"
+                , "#.......#"
+                , "#G..E..G#"
+                , "#.......#"
+                , "#.......#"
+                , "#G..G..G#"
+                , "#########"
+                ]
+              expected = grid
+                [ "#########"
+                , "#.G...G.#"
+                , "#...G...#"
+                , "#...E..G#"
+                , "#.G.....#"
+                , "#.......#"
+                , "#G..G..G#"
+                , "#.......#"
+                , "#########"
+                ]
+              (complete, g') = runARound (False, g)
+
+          -- wow this test actually passes but takes a very long time to complete!
+          Test.it "should be in the correct state after one round" $ do
+            complete `Test.shouldBe` False
+            g' `Test.shouldBe` expected
+
         Test.describe "Path finding" $ do
           let g  = grid ["E.", ".G"]
               to = ((1, 1), goblin)
@@ -317,47 +394,74 @@ runTests =
                       y `Test.shouldBe` ((1, 0), Space)
                     _ -> error "wrong number of next steps returned"
 
-          Test.it "basic path finding should work"
-            $ let from  = ((0, 0), elf)
-                  paths = allPaths [] S.empty g to from
-              in  length paths `Test.shouldBe` (2 :: Int)
+        Test.describe "Attacking" $ do
 
-          Test.it "should be possible to find the shortest path"
-            $ let from         = ((0, 0), elf)
-                  (l, d, path) = shortestPath g from to
-              in  do
-                    l `Test.shouldBe` (2 :: Int)
-                    d `Test.shouldBe` to
-                    case path of
-                      (firstStep : _) ->
-                        firstStep `Test.shouldBe` ((0, 1), Space)
-                      _ -> error "shortest path should have a first step"
+          Test.it "should correctly identify the weakest target"
+            $ let g1 = ((1, 1), Unit $ Goblin (AttackPower 3) (HitPoints 100))
+                  g2 = ((1, 1), Unit $ Goblin (AttackPower 3) (HitPoints 50))
+                  g3 = ((1, 1), Unit $ Goblin (AttackPower 3) (HitPoints 25))
+                  wk = weakest [g1, g2, g3]
+              in  wk `Test.shouldBe` g3
+
+          Test.it "equal weakest should be in reading order"
+            $ let g1 = ((1, 5), Unit $ Goblin (AttackPower 3) (HitPoints 100))
+                  g2 = ((1, 4), Unit $ Goblin (AttackPower 3) (HitPoints 100))
+                  g3 = ((1, 1), Unit $ Goblin (AttackPower 3) (HitPoints 150))
+                  wk = weakest [g1, g2, g3]
+              in  wk `Test.shouldBe` g2
+
+          Test.it "reduce hit points should work when non-fatal"
+            $ let g1 = ((1, 5), Unit $ Goblin (AttackPower 3) (HitPoints 100))
+                  g2 = ((1, 5), Unit $ Goblin (AttackPower 3) (HitPoints 97))
+              in  reduceHitPointsBy 3 g1 `Test.shouldBe` g2
+
+          Test.it "reduce hit points should work when fatal"
+            $ let g1 = ((1, 5), Unit $ Goblin (AttackPower 3) (HitPoints 3))
+                  g2 = ((1, 5), Space)
+              in  reduceHitPointsBy 3 g1 `Test.shouldBe` g2
+
 
         Test.describe "A slightly larger example grid" $ do
           let g = grid ["#######", "#.E...#", "#.....#", "#...G.#", "#######"]
+              from = ((1, 2), elf)
+              to = ((3, 4), goblin)
 
-          Test.xit "should select and mave the correct move"
-            $ let e   = ((1, 2), elf)
-                  gob = ((3, 4), goblin)
-                  g'  = traceShowId $ findMove g [gob] e
+          Test.it "should select and make the correct first move"
+            $ let g' = findMove g [to] from
               in  do
-                    -- the elf has actually moved to (2,4) so needs investigation
                     M.lookup (1, 3) g' `Test.shouldBe` Just elf
                     M.lookup (1, 2) g' `Test.shouldBe` Just Space
 
-          -- this gives completely the wrong path. The first step is to (2,4)
-          -- which is not even within one move. But at least I know about it.
-          Test.xit "should find the correct shortest path"
-            $ let from         = ((1, 2), elf)
-                  to           = ((3, 4), goblin)
-                  (l, d, path) = traceShowId $ shortestPath g from to
+          Test.it "should select and make the correct second move"
+            $ let g'  = findMove g [to] from
+                  g'' = findMove g' [to] ((1, 3), elf)
               in  do
-                    l `Test.shouldBe` (2 :: Int)
+                    M.lookup (1, 4) g'' `Test.shouldBe` Just elf
+                    M.lookup (1, 3) g'' `Test.shouldBe` Just Space
+
+          Test.it "should find all paths"
+            $ let paths = allPaths [] S.empty g to from
+              in  length paths `Test.shouldBe` (72 :: Int)
+
+          Test.it "should find the correct shortest path"
+            $ let (l, d, path) = shortestPath g from to
+              in  do
+                    l `Test.shouldBe` (4 :: Int)
                     d `Test.shouldBe` to
                     case path of
-                      (firstStep : _) ->
-                        firstStep `Test.shouldBe` ((0, 1), Space)
-                      _ -> error "shortest path should have a first step"
+                      [one, two, three, four] -> do
+                        one `Test.shouldBe` ((1, 3), Space)
+                        two `Test.shouldBe` ((1, 4), Space)
+                        three `Test.shouldBe` ((2, 4), Space)
+                        four `Test.shouldBe` to
+                      _ -> error "We should have got a four part path"
+
+          Test.it "should end in the correct state after taking a turn"
+            $ let (complete, g') = takeATurn from g
+              in  do
+                    complete `Test.shouldBe` False
+                    M.lookup (1, 3) g' `Test.shouldBe` Just elf
+                    M.lookup (1, 2) g' `Test.shouldBe` Just Space
 
 
 
