@@ -31,10 +31,10 @@ type Path = [Pair]
 
 type Grid = M.Map Coord Cell
 
-solution :: IO Grid
+solution :: IO Int
 solution = do
   g <- grid . lines <$> readFile "data/day15.txt"
-  pure g
+  pure $ playGame 0 g
 
 
 grid :: [String] -> Grid
@@ -45,6 +45,20 @@ grid rows = L.foldl'
   )
   M.empty
   (zip [0 ..] rows)
+
+playGame :: Int -> Grid -> Int
+playGame rounds g = case runARound (False, g) of
+  (False, g') -> playGame (rounds + 1) g'
+  (True , g') -> rounds * sumHitPoints g'
+
+sumHitPoints :: Grid -> Int
+sumHitPoints = M.foldr
+  (\cell total -> case cell of
+    Unit (Goblin _ (HitPoints h)) -> total + h
+    Unit (Elf    _ (HitPoints h)) -> total + h
+    _                             -> total
+  )
+  0
 
 runARound :: (Bool, Grid) -> (Bool, Grid)
 runARound (c, g) = L.foldl'
@@ -344,7 +358,23 @@ runTests =
                   M.lookup (0, 1) g' `Test.shouldBe` Just elf
                   M.lookup (0, 0) g' `Test.shouldBe` Just Space
 
-        Test.describe "Running a whole round" $ do
+        -- this test fails at the moment
+        Test.describe "Run the whole simulation" $ do
+          let g = grid
+                [ "#######"
+                , "#.G...#"
+                , "#...EG#"
+                , "#.#.#G#"
+                , "#..G#E#"
+                , "#.....#"
+                , "#######"
+                ]
+
+          Test.it "should give us the correct score"
+            $               playGame 0 g
+            `Test.shouldBe` (27730 :: Int)
+
+        Test.xdescribe "Running a whole round" $ do
           let g = grid
                 [ "#########"
                 , "#G..G..G#"
