@@ -123,7 +123,10 @@ compareCombatants _ _ = EQ
 findMove :: Grid -> [Pair] -> Pair -> Grid
 findMove g destinations unit =
   let paths =
-        L.sortBy comparePaths . catMaybes $ shortestPath g unit <$> destinations
+        L.sortBy comparePaths
+          .   catMaybes
+          $   shortestPath [] S.empty g unit
+          <$> destinations
   in  case paths of
         ((_, _, to : _) : _) -> move g unit to
         []                   -> g
@@ -138,32 +141,23 @@ move g (k, v) (k', _) =
         []  -> inserted
         adj -> snd $ attack newUnit adj inserted
 
--- this is doing a depth first search which is the wrong choice here. Should be
--- BFS which should be a lot faster.
---
--- don't forget that we actually might not find a path to all destinations
--- because it could be marooned. That's fine.
-shortestPath :: Grid -> Pair -> Pair -> Maybe (Int, Pair, Path)
-shortestPath g unit destination =
-  let paths       = allPaths [] S.empty g destination unit
-      mappedPaths = (\p -> (length p, destination, p)) <$> paths
-  in  case L.sortBy comparePaths mappedPaths of
-        (shortest : _) -> Just shortest
-        []             -> Nothing
-
-
-allPaths :: Path -> S.Set Coord -> Grid -> Pair -> Pair -> [Path]
-allPaths path visited g to from@(c, _)
-  | alreadySeen visited from
-  = []
-  | to == from
-  = [path]
-  | otherwise
-  = let visited' = S.insert c visited
-    in  case validAdjacentCells g to from of
-          [] -> [] -- ran out of options before we arrived
-          next ->
-            concat $ (\f -> allPaths (path <> [f]) visited' g to f) <$> next
+shortestPath
+  :: Path -> S.Set Coord -> Grid -> Pair -> Pair -> Maybe (Int, Pair, Path)
+shortestPath path visited g from@(c, _) to = if alreadySeen visited from
+  then Nothing
+  else
+    let visited' = S.insert c visited
+        va       = validAdjacentCells g to from
+    in  case L.find (== to) va of
+          Just to' -> Just (length path + 1, to', path <> [to'])
+          Nothing ->
+            let subPaths =
+                  catMaybes
+                    $   (\f -> shortestPath (path <> [f]) visited' g f to)
+                    <$> va
+            in  case L.sortBy comparePaths subPaths of
+                  (shortest : _) -> Just shortest
+                  []             -> Nothing
 
 
 validAdjacentCells :: Grid -> Pair -> Pair -> [Pair]
@@ -512,12 +506,8 @@ runTests =
                     M.lookup (1, 4) g'' `Test.shouldBe` Just elf
                     M.lookup (1, 3) g'' `Test.shouldBe` Just Space
 
-          Test.it "should find all paths"
-            $ let paths = allPaths [] S.empty g to from
-              in  length paths `Test.shouldBe` (72 :: Int)
-
           Test.it "should find the correct shortest path"
-            $ let p = shortestPath g from to
+            $ let p = shortestPath [] S.empty g from to
               in  case p of
                     Just (l, d, path) -> do
                       l `Test.shouldBe` (4 :: Int)
