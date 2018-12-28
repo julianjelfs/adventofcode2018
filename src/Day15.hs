@@ -1,12 +1,13 @@
 {-# LANGUAGE LambdaCase   #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TupleSections #-}
 module Day15 where
 
 import qualified Data.List                     as L
 import qualified Data.Map                      as M
 import           Data.Maybe                     ( catMaybes )
 import qualified Data.Set                      as S
---import           Debug.Trace                    ( traceShowId )
+import           Debug.Trace                    ( traceShowId )
 import qualified Test.Hspec                    as Test
 
 newtype AttackPower = AttackPower Int deriving (Show, Eq, Ord)
@@ -164,8 +165,8 @@ shortestPath path visited g from@(c, _) to = if alreadySeen visited from
                   (shortest : _) -> Just shortest
                   []             -> Nothing
 
-fanciestPath :: Grid -> Pair -> Pair -> Maybe Path
-fanciestPath g from@(c, _) to = 
+fanciestPath :: Grid -> Pair -> Pair -> M.Map Coord Int
+fanciestPath g (f, _) to@(_t, _) = 
     -- first we create a distance map in which all nodes in the grid have
     -- infinite (maxBound) distance except the start node
     let 
@@ -173,28 +174,40 @@ fanciestPath g from@(c, _) to =
         distances = M.foldrWithKey 
             (\k v dm -> 
                 case v of
-                    Space -> dm
                     Wall -> dm
-                    Unit u -> 
-                        if k == c
+                    Space -> M.insert k maxBound dm
+                    Unit _u -> 
+                        if k == f
                         then M.insert k (0::Int) dm
                         else M.insert k maxBound dm
             ) M.empty g
-        explored = go visited distances
+        path = go [] visited distances
         -- this should give us a full list of shortest distances to each node
         -- so we know what the shortest path to our target is, but how do we
         -- then know what that path *is*
-    in Nothing 
+    --in catMaybes $ (\c -> (c,) <$> M.lookup c g) <$> (drop 1 (reverse path))
+    in path
     where 
-        go :: S.Set Coord -> M.Map Coord Int -> M.Map Coord Int
-        go visited' distances' =
+        go :: [Coord] -> S.Set Coord -> M.Map Coord Int -> M.Map Coord Int
+        go path visited' distances' =
             case minDistance visited' distances' of
                 Nothing -> distances'
                 Just (k, v) -> 
-                    let visited'' = S.insert k visited'
-                        ac = validAdjacentCells g to (k, Space)
-                        distances'' = L.foldr (\(c, _) dm -> M.update (\_ -> Just $ v + 1) c dm) distances' ac
-                    in go visited'' distances''
+                    -- if k == t       -- this is the node we are looking for
+                    -- then k : path
+                    -- else
+                        let visited'' = S.insert k visited'
+                            ac = validAdjacentCells g to (k, Space)
+                            distances'' = L.foldr 
+                                (\(c, _) dm -> 
+                                    case M.lookup c dm of
+                                        Nothing -> dm
+                                        Just d -> 
+                                            if v + 1 < d
+                                            then M.update (\_ -> Just $ v + 1) c dm
+                                            else dm
+                                ) distances' ac
+                        in go (k : path) visited'' distances''
 
         minDistance :: S.Set Coord -> M.Map Coord Int -> Maybe (Coord, Int)
         minDistance set' = M.foldrWithKey 
@@ -476,7 +489,7 @@ runTests =
                     ]
               in  playGame 0 g `Test.shouldBe` (54 :: Int, 536 :: Int)
 
-          Test.it "test grid six"
+          Test.xit "test grid six"
             $ let g = grid
                     [ "#########"
                     , "#G......#"
@@ -538,7 +551,12 @@ runTests =
 
 
         Test.describe "A slightly larger example grid" $ do
-          let g = grid ["#######", "#.E...#", "#.....#", "#...G.#", "#######"]
+          let g = grid [ "#######"
+                       , "#.E...#"
+                       , "#.....#"
+                       , "#...G.#"
+                       , "#######"
+                       ]
               from = ((1, 2), elf)
               to = ((3, 4), goblin)
 
@@ -569,6 +587,17 @@ runTests =
                           four `Test.shouldBe` to
                         _ -> error "We should have got a four part path"
                     Nothing -> error "we expected to get a shortest path"
+
+          Test.it "should find the correct shortest path via dijkstra"
+            $ let distances = traceShowId $ fanciestPath g from to
+              in length distances `Test.shouldBe` 15
+              -- in  case path of
+              --       [one, two, three, four] -> do
+              --         one `Test.shouldBe` ((1, 3), Space)
+              --         two `Test.shouldBe` ((1, 4), Space)
+              --         three `Test.shouldBe` ((2, 4), Space)
+              --         four `Test.shouldBe` to
+              --       _ -> error "We should have got a four part path"
 
           Test.it "should end in the correct state after taking a turn"
             $ let (complete, g') = takeATurn from g
