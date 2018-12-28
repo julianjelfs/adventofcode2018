@@ -164,6 +164,49 @@ shortestPath path visited g from@(c, _) to = if alreadySeen visited from
                   (shortest : _) -> Just shortest
                   []             -> Nothing
 
+fanciestPath :: Grid -> Pair -> Pair -> Maybe Path
+fanciestPath g from@(c, _) to = 
+    -- first we create a distance map in which all nodes in the grid have
+    -- infinite (maxBound) distance except the start node
+    let 
+        visited = S.empty
+        distances = M.foldrWithKey 
+            (\k v dm -> 
+                case v of
+                    Space -> dm
+                    Wall -> dm
+                    Unit u -> 
+                        if k == c
+                        then M.insert k (0::Int) dm
+                        else M.insert k maxBound dm
+            ) M.empty g
+        explored = go visited distances
+        -- this should give us a full list of shortest distances to each node
+        -- so we know what the shortest path to our target is, but how do we
+        -- then know what that path *is*
+    in Nothing 
+    where 
+        go :: S.Set Coord -> M.Map Coord Int -> M.Map Coord Int
+        go visited' distances' =
+            case minDistance visited' distances' of
+                Nothing -> distances'
+                Just (k, v) -> 
+                    let visited'' = S.insert k visited'
+                        ac = validAdjacentCells g to (k, Space)
+                        distances'' = L.foldr (\(c, _) dm -> M.update (\_ -> Just $ v + 1) c dm) distances' ac
+                    in go visited'' distances''
+
+        minDistance :: S.Set Coord -> M.Map Coord Int -> Maybe (Coord, Int)
+        minDistance set' = M.foldrWithKey 
+            (\k v m -> 
+                if S.member k set' 
+                then m
+                else case m of 
+                        Nothing -> Just (k, v)
+                        Just (k', v') -> Just $ if v' < v then (k', v') else (k, v)
+            ) Nothing
+
+
 
 validAdjacentCells :: Grid -> Pair -> Pair -> [Pair]
 validAdjacentCells g to from =
