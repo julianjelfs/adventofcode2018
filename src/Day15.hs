@@ -68,15 +68,19 @@ runARound g = L.foldl'
   (units g)
 
 takeATurn :: Pair -> Grid -> (Bool, Grid)
-takeATurn unit@(_, Unit _combatant) g@(gridToList -> listGrid) =
-  case adjacentTargets g unit of
-    [] -> case targets unit listGrid of
-      [] -> (True, g) -- This is game over
-      ts -> case allAvailableAdjacentCells g ts of
-        []          -> (False, g) -- there are targets but none of them have adjacent free cells
-        targetCells -> (False, findMove g targetCells unit)
-    adj -> attack unit adj g
-takeATurn _ _ = error "non-combatants should not be taking turns"
+takeATurn (uc, _) g@(gridToList -> listGrid) = case M.lookup uc g of
+  Nothing    -> (False, g)
+  Just Wall  -> (False, g)
+  Just Space -> (False, g)
+  Just u ->
+    let unit = (uc, u)
+    in  case adjacentTargets g unit of
+          [] -> case targets unit listGrid of
+            [] -> (True, g) -- This is game over
+            ts -> case allAvailableAdjacentCells g ts of
+              []          -> (False, g) -- there are targets but none of them have adjacent free cells
+              targetCells -> (False, findMove g targetCells unit)
+          adj -> attack unit adj g
 
 attack :: Pair -> [Pair] -> Grid -> (Bool, Grid)
 attack unit (weakest -> w@(wc, _)) g =
@@ -119,7 +123,6 @@ compareCombatants (p1, Unit (Elf _ (HitPoints a))) (p2, Unit (Elf _ (HitPoints b
   = a `compare` b
 compareCombatants _ _ = EQ
 
-
 findMove :: Grid -> [Pair] -> Pair -> Grid
 findMove g destinations unit =
   let paths =
@@ -141,6 +144,8 @@ move g (k, v) (k', _) =
         []  -> inserted
         adj -> snd $ attack newUnit adj inserted
 
+-- need to convert this to use A* (probably specialised to Dijkstra to make sure
+-- we get the correct path)
 shortestPath
   :: Path -> S.Set Coord -> Grid -> Pair -> Pair -> Maybe (Int, Pair, Path)
 shortestPath path visited g from@(c, _) to = if alreadySeen visited from
@@ -161,7 +166,8 @@ shortestPath path visited g from@(c, _) to = if alreadySeen visited from
 
 
 validAdjacentCells :: Grid -> Pair -> Pair -> [Pair]
-validAdjacentCells g to = L.filter (validNextStep to) . adjacentCells g
+validAdjacentCells g to from =
+  L.filter (validNextStep to) $ adjacentCells g from
 
 validNextStep :: Pair -> Pair -> Bool
 validNextStep to p = p == to || isSpace p
