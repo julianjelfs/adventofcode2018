@@ -38,6 +38,7 @@ executable adventofcode2018
   build-depends:       base >= 4.7 && < 5
                       , criterion
                       , containers
+                      , unordered-containers
                       , vector
                       , regex-pcre-builtin
                       , split
