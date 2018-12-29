@@ -7,7 +7,7 @@ import qualified Data.List                     as L
 import qualified Data.Map.Strict               as M
 import           Data.Maybe                     ( catMaybes )
 import qualified Data.Set                      as S
---import           Debug.Trace                    ( traceShowId )
+import           Debug.Trace                    ( traceShowId )
 import qualified Test.Hspec                    as Test
 
 newtype AttackPower = AttackPower Int deriving (Show, Eq, Ord)
@@ -34,9 +34,7 @@ type Path = [Pair]
 type Grid = M.Map Coord Cell
 
 solution :: IO (Int, Int)
-solution = do
-  g <- grid . lines <$> readFile "data/day15.txt"
-  pure $ playGame 0 g
+solution = grid . lines <$> readFile "data/day15.txt" >>= playGame 0
 
 
 grid :: [String] -> Grid
@@ -48,10 +46,12 @@ grid rows = L.foldl'
   M.empty
   (zip [0 ..] rows)
 
-playGame :: Int -> Grid -> (Int, Int)
-playGame rounds g = case runARound g of
-  (False, g') -> playGame (rounds + 1) g'
-  (True , g') -> (rounds, sumHitPoints g')
+playGame :: Int -> Grid -> IO (Int, Int)
+playGame rounds g = runARound g >>= \case
+  (False, g') -> do
+    _ <- print $ show rounds
+    playGame (rounds + 1) g'
+  (True, g') -> pure (rounds, sumHitPoints g')
 
 sumHitPoints :: Grid -> Int
 sumHitPoints = M.foldr
@@ -62,8 +62,8 @@ sumHitPoints = M.foldr
   )
   0
 
-runARound :: Grid -> (Bool, Grid)
-runARound g = L.foldl'
+runARound :: Grid -> IO (Bool, Grid)
+runARound g = pure $ L.foldl'
   (\(complete, g') u -> if complete then (complete, g') else takeATurn u g')
   (False, g)
   (units g)
@@ -448,7 +448,9 @@ runTests =
                     , "#.....#"
                     , "#######"
                     ]
-              in  playGame 0 g `Test.shouldBe` (47 :: Int, 590 :: Int)
+              in  do
+                    res <- playGame 0 g
+                    res `Test.shouldBe` (47 :: Int, 590 :: Int)
 
           Test.it "test grid two"
             $ let g = grid
@@ -460,7 +462,9 @@ runTests =
                     , "#...E.#"
                     , "#######"
                     ]
-              in  playGame 0 g `Test.shouldBe` (37 :: Int, 982 :: Int)
+              in  do
+                    res <- playGame 0 g
+                    res `Test.shouldBe` (37 :: Int, 982 :: Int)
 
           Test.it "test grid three"
             $ let g = grid
@@ -472,7 +476,9 @@ runTests =
                     , "#..E#.#"
                     , "#######"
                     ]
-              in  playGame 0 g `Test.shouldBe` (46 :: Int, 859 :: Int)
+              in  do
+                    res <- playGame 0 g
+                    res `Test.shouldBe` (46 :: Int, 859 :: Int)
 
           Test.it "test grid four"
             $ let g = grid
@@ -484,7 +490,9 @@ runTests =
                     , "#...E.#"
                     , "#######"
                     ]
-              in  playGame 0 g `Test.shouldBe` (35 :: Int, 793 :: Int)
+              in  do
+                    res <- playGame 0 g
+                    res `Test.shouldBe` (35 :: Int, 793 :: Int)
 
           Test.it "test grid five"
             $ let g = grid
@@ -496,7 +504,9 @@ runTests =
                     , "#...#G#"
                     , "#######"
                     ]
-              in  playGame 0 g `Test.shouldBe` (54 :: Int, 536 :: Int)
+              in  do
+                    res <- playGame 0 g
+                    res `Test.shouldBe` (54 :: Int, 536 :: Int)
 
           Test.it "test grid six"
             $ let g = grid
@@ -510,7 +520,9 @@ runTests =
                     , "#.....G.#"
                     , "#########"
                     ]
-              in  playGame 0 g `Test.shouldBe` (20 :: Int, 937 :: Int)
+              in  do
+                    res <- playGame 0 g
+                    res `Test.shouldBe` (20 :: Int, 937 :: Int)
 
         Test.describe "Path finding" $ do
           let g  = grid ["E.", ".G"]
@@ -609,3 +621,97 @@ runTests =
                     complete `Test.shouldBe` False
                     M.lookup (1, 3) g' `Test.shouldBe` Just elf
                     M.lookup (1, 2) g' `Test.shouldBe` Just Space
+
+        Test.describe "With the full grid" $ do
+          let g    = grid fullGrid
+              from = ((4, 16), goblin)
+
+          Test.it "should find the correct shortest path via dijkstra"
+            $ let distances = minimumDistanceMap g (4, 16)
+              in  do
+                    length distances `Test.shouldBe` 362
+                    M.lookup (1, 10) distances `Test.shouldBe` Just 11
+
+          Test.it "should successfully find adjacent targets"
+            $               adjacentTargets g from
+            `Test.shouldBe` []
+
+          Test.it "should successfully find opponents"
+            $ let ts = targets from (gridToList g)
+              in  length ts `Test.shouldBe` 10
+
+          Test.it "should successfully find target cells"
+            $ let ts    = targets from (gridToList g)
+                  cells = allAvailableAdjacentCells g ts
+              in  length cells `Test.shouldBe` 34
+
+          Test.it "should successfully find the best target cell"
+            $ let ts         = targets from (gridToList g)
+                  cells      = allAvailableAdjacentCells g ts
+                  bestTarget = findBestTarget g from cells
+              in  bestTarget `Test.shouldBe` Just (11, 23)
+
+          Test.xit
+              "should successfully find the shortest path to the best target cell"
+            $ let ts         = targets from (gridToList g)
+                  cells      = allAvailableAdjacentCells g ts
+                  bestTarget = findBestTarget g from cells
+                  res        = case bestTarget of
+                    Nothing   -> error "this should not happen"
+                    Just cell -> shortestPath [] S.empty g from (cell, Space)
+              in  case res of
+                    Just (l, _, _) -> l `Test.shouldBe` (10 :: Int)
+                    Nothing        -> error "this should not happen"
+
+
+          -- this test takes an insane amount of time so the problem lies in
+          -- here somewhere, just need to break it down some more
+          Test.xit "should successfully run a move"
+            $ let (complete, _g') = traceShowId $ takeATurn from g
+              in  complete `Test.shouldBe` False
+
+
+-- findMove :: Grid -> [Pair] -> Pair -> Grid
+-- findMove g possibleTargets unit = case findBestTarget g unit possibleTargets of
+--   Nothing -> g
+--   Just t  -> case shortestPath [] S.empty g unit (t, Space) of
+--     Nothing        -> g
+--     Just (_, _, p) -> case p of
+--       (to : _) -> move g unit to
+--       _        -> g
+
+fullGrid :: [String]
+fullGrid =
+  [ "################################"
+  , "##########.###.###..############"
+  , "##########..##......############"
+  , "#########...##....##############"
+  , "######.....###..G..G############"
+  , "##########..........############"
+  , "##########.............#########"
+  , "#######G..#.G...#......#########"
+  , "#..G##....##..#.G#....#...######"
+  , "##......###..##..####.#..#######"
+  , "#G.G..#..#....#.###...G..#######"
+  , "#.....GG##................######"
+  , "#....G........#####....E.E.#####"
+  , "#####G...#...#######........####"
+  , "####.E#.G...#########.......####"
+  , "#...G.....#.#########......#####"
+  , "#.##........#########.......####"
+  , "######......#########........###"
+  , "######......#########..E.#....##"
+  , "#######..E.G.#######..........##"
+  , "#######E......#####............#"
+  , "#######...G............E.......#"
+  , "####............##............##"
+  , "####..G.........##..........E.##"
+  , "####.G.G#.....####E...##....#.##"
+  , "#######.......####...####..#####"
+  , "########....E....########..#####"
+  , "##########.......#########...###"
+  , "##########.......#########..####"
+  , "##########....############..####"
+  , "###########...##################"
+  , "################################"
+  ]
