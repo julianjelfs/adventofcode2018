@@ -1,11 +1,12 @@
-{-# LANGUAGE LambdaCase    #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE ViewPatterns  #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE ViewPatterns        #-}
 module Day15 where
 
 import qualified Data.List                     as L
 import qualified Data.Map.Strict               as M
-import           Data.Maybe                     ( catMaybes )
+--import           Data.Maybe                     ( catMaybes )
 import qualified Data.Set                      as S
 import           Debug.Trace                    ( traceShowId )
 import qualified Test.Hspec                    as Test
@@ -48,10 +49,8 @@ grid rows = L.foldl'
 
 playGame :: Int -> Grid -> IO (Int, Int)
 playGame rounds g = runARound g >>= \case
-  (False, g') -> do
-    _ <- print $ show rounds
-    playGame (rounds + 1) g'
-  (True, g') -> pure (rounds, sumHitPoints g')
+  (False, g') -> playGame (rounds + 1) g'
+  (True , g') -> pure (rounds, sumHitPoints g')
 
 sumHitPoints :: Grid -> Int
 sumHitPoints = M.foldr
@@ -149,7 +148,7 @@ findBestTarget g (from, _) possibleTargets =
 findMove :: Grid -> [Pair] -> Pair -> Grid
 findMove g possibleTargets unit = case findBestTarget g unit possibleTargets of
   Nothing -> g
-  Just t  -> case shortestPath [] S.empty g unit (t, Space) of
+  Just t  -> case shortestPath g unit (t, Space) of
     Nothing        -> g
     Just (_, _, p) -> case p of
       (to : _) -> move g unit to
@@ -164,24 +163,33 @@ move g (k, v) (k', _) =
         []  -> inserted
         adj -> snd $ attack newUnit adj inserted
 
-shortestPath
-  :: Path -> S.Set Coord -> Grid -> Pair -> Pair -> Maybe (Int, Pair, Path)
-shortestPath path visited g from@(c, _) to = if alreadySeen visited from
-  then Nothing
-  else
-    let visited' = S.insert c visited
-        va       = validAdjacentCells g to from
-    in  case L.find (== to) va of
-          Just to' -> Just (length path + 1, to', path <> [to'])
-          Nothing ->
-            let subPaths =
-                  catMaybes
-                    $   (\f -> shortestPath (path <> [f]) visited' g f to)
-                    <$> va
-            in  case L.sortBy comparePaths subPaths of
-                  (shortest : _) -> Just shortest
-                  []             -> Nothing
 
+-- this returns way more paths than it needs to because the visited tracking is
+-- not right. The visited state needs to be shared between branches. But that
+-- only works if we are traversing breadth first which we were not doing before.
+-- also might work if we recorded the depth with each visit. Then only
+-- short-circuit if we have already visited this node at shallower depth.
+allPaths :: Path -> S.Set Coord -> Grid -> Pair -> Pair -> [Path]
+allPaths path visited g from@(c, _) to
+  | S.member c visited
+  = []
+  | otherwise
+  = let visited' = S.insert c visited
+        va       = validAdjacentCells g to from
+    in  if to `elem` va
+          then [path <> [to]]
+          else concat $ (\f -> allPaths (path <> [f]) visited' g f to) <$> va
+
+
+shortestPath :: Grid -> Pair -> Pair -> Maybe (Int, Pair, Path)
+shortestPath g from to =
+  let paths  = allPaths [] S.empty g from to
+      mapped = (\p -> (length p, to, p)) <$> paths
+  in  case L.sortBy comparePaths mapped of
+        (shortest : _) -> Just shortest
+        []             -> Nothing
+
+--
 -- this is a Dijkstra algorithm to find the minimum distance to each space in
 -- the map from where we currently are
 minimumDistanceMap :: Grid -> Coord -> M.Map Coord Int
@@ -591,7 +599,7 @@ runTests =
                     M.lookup (1, 3) g'' `Test.shouldBe` Just Space
 
           Test.it "should find the correct shortest path"
-            $ let p = shortestPath [] S.empty g from to
+            $ let p = shortestPath g from to
               in  case p of
                     Just (l, d, path) -> do
                       l `Test.shouldBe` (4 :: Int)
@@ -604,6 +612,15 @@ runTests =
                           four `Test.shouldBe` to
                         _ -> error "We should have got a four part path"
                     Nothing -> error "we expected to get a shortest path"
+
+          Test.it "should find all paths correctly"
+            $ let paths = allPaths [] S.empty g from to
+              in  length paths `Test.shouldBe` (26 :: Int)
+
+          Test.it "should find the correct adjacent cells"
+            $ let paths = validAdjacentCells g to ((2, 2), Space)
+              in  length paths `Test.shouldBe` (3 :: Int)
+
 
           Test.it "should find the correct shortest path via dijkstra"
             $ let distances = minimumDistanceMap g (1, 2)
@@ -651,14 +668,14 @@ runTests =
                   bestTarget = findBestTarget g from cells
               in  bestTarget `Test.shouldBe` Just (11, 23)
 
-          Test.xit
+          Test.it
               "should successfully find the shortest path to the best target cell"
             $ let ts         = targets from (gridToList g)
                   cells      = allAvailableAdjacentCells g ts
                   bestTarget = findBestTarget g from cells
                   res        = case bestTarget of
                     Nothing   -> error "this should not happen"
-                    Just cell -> shortestPath [] S.empty g from (cell, Space)
+                    Just cell -> shortestPath g from (cell, Space)
               in  case res of
                     Just (l, _, _) -> l `Test.shouldBe` (10 :: Int)
                     Nothing        -> error "this should not happen"
