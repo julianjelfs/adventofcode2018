@@ -1,13 +1,13 @@
-{-# LANGUAGE LambdaCase   #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE LambdaCase    #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns  #-}
 module Day15 where
 
 import qualified Data.List                     as L
 import qualified Data.Map                      as M
 import           Data.Maybe                     ( catMaybes )
 import qualified Data.Set                      as S
-import           Debug.Trace                    ( traceShowId )
+--import           Debug.Trace                    ( traceShowId )
 import qualified Test.Hspec                    as Test
 
 newtype AttackPower = AttackPower Int deriving (Show, Eq, Ord)
@@ -124,17 +124,36 @@ compareCombatants (p1, Unit (Elf _ (HitPoints a))) (p2, Unit (Elf _ (HitPoints b
   = a `compare` b
 compareCombatants _ _ = EQ
 
+findBestTarget :: Grid -> Pair -> [Pair] -> Maybe Coord
+findBestTarget g (from, _) possibleTargets =
+  let distance = minimumDistanceMap g from
+      targetDistances =
+        (\(p, _) -> (p, M.lookup p distance)) <$> possibleTargets
+  in  case L.sortBy compareDistance $ catMaybes' targetDistances of
+        []           -> Nothing
+        ((t, _) : _) -> Just t
+ where
+  catMaybes' :: [(a, Maybe Int)] -> [(a, Int)]
+  catMaybes' = foldr
+    (\(a, b) xs -> case b of
+      Just b' -> (a, b') : xs
+      Nothing -> xs
+    )
+    []
+
+  compareDistance :: (Coord, Int) -> (Coord, Int) -> Ordering
+  compareDistance (c, d) (c', d') | d == d'   = c `compare` c'
+                                  | otherwise = d `compare` d'
+
+
 findMove :: Grid -> [Pair] -> Pair -> Grid
-findMove g destinations unit =
-  let paths =
-        L.sortBy comparePaths
-          .   catMaybes
-          $   shortestPath [] S.empty g unit
-          <$> destinations
-  in  case paths of
-        ((_, _, to : _) : _) -> move g unit to
-        []                   -> g
-        _                    -> error "we didn't find a move to make"
+findMove g possibleTargets unit = case findBestTarget g unit possibleTargets of
+  Nothing -> g
+  Just t  -> case shortestPath [] S.empty g unit (t, Space) of
+    Nothing        -> g
+    Just (_, _, p) -> case p of
+      (to : _) -> move g unit to
+      _        -> g
 
 move :: Grid -> Pair -> Pair -> Grid
 move g (k, v) (k', _) =
@@ -145,8 +164,6 @@ move g (k, v) (k', _) =
         []  -> inserted
         adj -> snd $ attack newUnit adj inserted
 
--- need to convert this to use A* (probably specialised to Dijkstra to make sure
--- we get the correct path)
 shortestPath
   :: Path -> S.Set Coord -> Grid -> Pair -> Pair -> Maybe (Int, Pair, Path)
 shortestPath path visited g from@(c, _) to = if alreadySeen visited from
@@ -165,59 +182,51 @@ shortestPath path visited g from@(c, _) to = if alreadySeen visited from
                   (shortest : _) -> Just shortest
                   []             -> Nothing
 
-fanciestPath :: Grid -> Pair -> Pair -> M.Map Coord Int
-fanciestPath g (f, _) to@(_t, _) = 
-    -- first we create a distance map in which all nodes in the grid have
-    -- infinite (maxBound) distance except the start node
-    let 
-        visited = S.empty
-        distances = M.foldrWithKey 
-            (\k v dm -> 
-                case v of
-                    Wall -> dm
-                    Space -> M.insert k maxBound dm
-                    Unit _u -> 
-                        if k == f
-                        then M.insert k (0::Int) dm
-                        else M.insert k maxBound dm
-            ) M.empty g
-        path = go [] visited distances
-        -- this should give us a full list of shortest distances to each node
-        -- so we know what the shortest path to our target is, but how do we
-        -- then know what that path *is*
-    --in catMaybes $ (\c -> (c,) <$> M.lookup c g) <$> (drop 1 (reverse path))
-    in path
-    where 
-        go :: [Coord] -> S.Set Coord -> M.Map Coord Int -> M.Map Coord Int
-        go path visited' distances' =
-            case minDistance visited' distances' of
-                Nothing -> distances'
-                Just (k, v) -> 
-                    -- if k == t       -- this is the node we are looking for
-                    -- then k : path
-                    -- else
-                        let visited'' = S.insert k visited'
-                            ac = validAdjacentCells g to (k, Space)
-                            distances'' = L.foldr 
-                                (\(c, _) dm -> 
-                                    case M.lookup c dm of
-                                        Nothing -> dm
-                                        Just d -> 
-                                            if v + 1 < d
-                                            then M.update (\_ -> Just $ v + 1) c dm
-                                            else dm
-                                ) distances' ac
-                        in go (k : path) visited'' distances''
+-- this is a Dijkstra algorithm to find the minimum distance to each space in
+-- the map from where we currently are
+minimumDistanceMap :: Grid -> Coord -> M.Map Coord Int
+minimumDistanceMap g f =
+  let distances = M.foldrWithKey
+        (\k v dm -> case v of
+          Space -> M.insert k maxBound dm
+          _     -> dm
+        )
+        (M.singleton f (0 :: Int))
+        g
+  in  filterOutUnreachables $ go S.empty distances
+ where
+  filterOutUnreachables :: M.Map Coord Int -> M.Map Coord Int
+  filterOutUnreachables = M.filter (< maxBound)
 
-        minDistance :: S.Set Coord -> M.Map Coord Int -> Maybe (Coord, Int)
-        minDistance set' = M.foldrWithKey 
-            (\k v m -> 
-                if S.member k set' 
-                then m
-                else case m of 
-                        Nothing -> Just (k, v)
-                        Just (k', v') -> Just $ if v' < v then (k', v') else (k, v)
-            ) Nothing
+  go :: S.Set Coord -> M.Map Coord Int -> M.Map Coord Int
+  go visited' distances' = case minDistance visited' distances' of
+    Nothing     -> distances'
+    Just (k, v) -> if v == maxBound   --this means that we have resolved as much as we can - the remaining nodes are unreachable
+      then distances'
+      else
+        let
+          visited''   = S.insert k visited'
+          ac          = availableAdjacentCells g (k, Space)
+          distances'' = L.foldr
+            (\(c, _) dm -> case M.lookup c dm of
+              Nothing -> dm
+              Just d ->
+                if v + 1 < d then M.update (\_ -> Just $ v + 1) c dm else dm
+            )
+            distances'
+            ac
+        in
+          go visited'' distances''
+
+  minDistance :: S.Set Coord -> M.Map Coord Int -> Maybe (Coord, Int)
+  minDistance set' = M.foldrWithKey
+    (\k v m -> if S.member k set'
+      then m
+      else case m of
+        Nothing       -> Just (k, v)
+        Just (k', v') -> Just $ if v' < v then (k', v') else (k, v)
+    )
+    Nothing
 
 
 
@@ -489,7 +498,7 @@ runTests =
                     ]
               in  playGame 0 g `Test.shouldBe` (54 :: Int, 536 :: Int)
 
-          Test.xit "test grid six"
+          Test.it "test grid six"
             $ let g = grid
                     [ "#########"
                     , "#G......#"
@@ -551,24 +560,20 @@ runTests =
 
 
         Test.describe "A slightly larger example grid" $ do
-          let g = grid [ "#######"
-                       , "#.E...#"
-                       , "#.....#"
-                       , "#...G.#"
-                       , "#######"
-                       ]
-              from = ((1, 2), elf)
-              to = ((3, 4), goblin)
+          let g = grid ["#######", "#.E...#", "#.....#", "#...G.#", "#######"]
+              from    = ((1, 2), elf)
+              to      = ((3, 4), goblin)
+              targets = [((3, 3), Space), ((3, 5), Space), ((2, 4), Space)]
 
           Test.it "should select and make the correct first move"
-            $ let g' = findMove g [to] from
+            $ let g' = findMove g targets from
               in  do
                     M.lookup (1, 3) g' `Test.shouldBe` Just elf
                     M.lookup (1, 2) g' `Test.shouldBe` Just Space
 
           Test.it "should select and make the correct second move"
-            $ let g'  = findMove g [to] from
-                  g'' = findMove g' [to] ((1, 3), elf)
+            $ let g'  = findMove g targets from
+                  g'' = findMove g' targets ((1, 3), elf)
               in  do
                     M.lookup (1, 4) g'' `Test.shouldBe` Just elf
                     M.lookup (1, 3) g'' `Test.shouldBe` Just Space
@@ -589,15 +594,14 @@ runTests =
                     Nothing -> error "we expected to get a shortest path"
 
           Test.it "should find the correct shortest path via dijkstra"
-            $ let distances = traceShowId $ fanciestPath g from to
-              in length distances `Test.shouldBe` 15
-              -- in  case path of
-              --       [one, two, three, four] -> do
-              --         one `Test.shouldBe` ((1, 3), Space)
-              --         two `Test.shouldBe` ((1, 4), Space)
-              --         three `Test.shouldBe` ((2, 4), Space)
-              --         four `Test.shouldBe` to
-              --       _ -> error "We should have got a four part path"
+            $ let distances = minimumDistanceMap g (1, 2)
+              in  do
+                    length distances `Test.shouldBe` 14
+                    M.lookup (3, 3) distances `Test.shouldBe` Just 3
+
+          Test.it "should correctly find the best target"
+            $ let t = findBestTarget g from targets
+              in  t `Test.shouldBe` Just (2, 4)
 
           Test.it "should end in the correct state after taking a turn"
             $ let (complete, g') = takeATurn from g
