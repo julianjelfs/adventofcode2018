@@ -74,11 +74,9 @@ runTests =
           $ let g = grid 3 ["#G#####", "#EG.G.#"]
                 t = adjacentCells g ((1, 1), elf)
             in  case t of
-                  [(c1, Unit (Goblin _ _)), (c2, Wall), (c3, Unit (Goblin _ _))]
-                    -> do
-                      c1 `Test.shouldBe` ((0, 1) :: (Int, Int))
-                      c2 `Test.shouldBe` ((1, 0) :: (Int, Int))
-                      c3 `Test.shouldBe` ((1, 2) :: (Int, Int))
+                  [(c1, Unit (Goblin _ _)), (c2, Unit (Goblin _ _))] -> do
+                    c1 `Test.shouldBe` ((0, 1) :: (Int, Int))
+                    c2 `Test.shouldBe` ((1, 2) :: (Int, Int))
                   _ -> error
                     "we didn't get the number of results that we expected"
 

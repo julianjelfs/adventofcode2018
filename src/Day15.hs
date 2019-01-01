@@ -17,8 +17,7 @@ data Combatant
     deriving (Show, Eq, Ord)
 
 data Cell
-    = Wall
-    | Unit Combatant
+    = Unit Combatant
     | Space
     deriving (Show, Eq, Ord)
 
@@ -42,10 +41,11 @@ partTwo elfAttackPower elfDeathFatal =
 
 grid :: Int -> [String] -> Grid
 grid elfAttackPower rows = L.foldl'
-  (\m (y, row) ->
-    -- we do (y, x) rather than (x, y) so that we get reading order by default
-                  L.foldl'
-    (\m (x, c) -> M.insert (y, x) (parseCell elfAttackPower c) m)
+  (\m (y, row) -> L.foldl'
+    (\m (x, c) -> case parseCell elfAttackPower c of
+      Nothing   -> m
+      Just cell -> M.insert (y, x) cell m
+    )
     m
     (zip [0 ..] row)
   )
@@ -85,7 +85,6 @@ takeATurn :: Bool -> Pair -> Grid -> (Bool, Grid)
 takeATurn elfDeathFatal (uc, _) g@(gridToList -> listGrid) =
   case M.lookup uc g of
     Nothing    -> (False, g)
-    Just Wall  -> (False, g)
     Just Space -> (False, g)
     Just u ->
       let unit = (uc, u)
@@ -308,7 +307,7 @@ adjacentTargets :: Grid -> Pair -> [Pair]
 adjacentTargets g c = L.filter (isTargetOf c) $ adjacentCells g c
 
 
-isGoblin, isElf, isUnit, isSpace, isWall :: Pair -> Bool
+isGoblin, isElf, isUnit, isSpace :: Pair -> Bool
 isUnit (_, Unit _) = True
 isUnit _           = False
 
@@ -320,9 +319,6 @@ isElf _                   = False
 
 isSpace (_, Space) = True
 isSpace _          = False
-
-isWall (_, Wall) = True
-isWall _         = False
 
 adjacentCells :: Grid -> Pair -> [Pair]
 adjacentCells grid ((y, x), _) = foldr
@@ -345,10 +341,10 @@ availableAdjacentCells :: Grid -> Pair -> [Pair]
 availableAdjacentCells g = L.filter isSpace . adjacentCells g
 
 
-parseCell :: Int -> Char -> Cell
+parseCell :: Int -> Char -> Maybe Cell
 parseCell elfAttackPower = \case
-  '#' -> Wall
-  'G' -> Unit $ Goblin (AttackPower 3) (HitPoints 200)
-  'E' -> Unit $ Elf (AttackPower elfAttackPower) (HitPoints 200)
-  '.' -> Space
+  '#' -> Nothing
+  'G' -> Just . Unit $ Goblin (AttackPower 3) (HitPoints 200)
+  'E' -> Just . Unit $ Elf (AttackPower elfAttackPower) (HitPoints 200)
+  '.' -> Just Space
   _   -> error "parse error"
