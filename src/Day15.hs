@@ -6,7 +6,6 @@ module Day15 where
 import qualified Data.List                     as L
 import qualified Data.Map.Strict               as M
 import qualified Data.Set                      as S
---import           Debug.Trace                    ( traceShowId )
 
 newtype AttackPower = AttackPower Int deriving (Show, Eq, Ord)
 
@@ -118,11 +117,6 @@ extractAttackPower (_, Unit (Goblin (AttackPower n) _)) = n
 extractAttackPower (_, Unit (Elf (AttackPower n) _)) = n
 extractAttackPower _ = 0
 
-extractHitPoints :: Pair -> Int
-extractHitPoints (_, Unit (Goblin _ (HitPoints n))) = n
-extractHitPoints (_, Unit (Elf _ (HitPoints n))) = n
-extractHitPoints _ = 0
-
 weakest :: [Pair] -> Pair
 weakest []    = error "can't find the weakest in an empty list"
 weakest units = L.minimumBy compareCombatants units
@@ -174,12 +168,11 @@ findMove elfDeathFatal g possibleTargets unit =
 
 move :: Bool -> Grid -> Pair -> Pair -> Grid
 move elfDeathFatal g (k, v) (k', _) =
-  let newUnit  = (k', v)
-      deleted  = M.delete k' $ M.delete k g
-      inserted = M.insert k Space $ M.insert k' v deleted
-  in  case adjacentTargets inserted newUnit of
-        []  -> inserted
-        adj -> snd $ attack elfDeathFatal newUnit adj inserted
+  let newUnit = (k', v)
+      updated = M.update (\_ -> Just Space) k (M.update (\_ -> Just v) k' g)
+  in  case adjacentTargets updated newUnit of
+        []  -> updated
+        adj -> snd $ attack elfDeathFatal newUnit adj updated
 
 allPaths :: Grid -> Pair -> Pair -> [Path]
 allPaths g from to = go [] S.empty [[from]]
