@@ -1,14 +1,12 @@
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE ViewPatterns        #-}
 module Day15 where
 
 import qualified Data.List                     as L
 import qualified Data.Map.Strict               as M
---import           Data.Maybe                     ( catMaybes )
 import qualified Data.Set                      as S
-import           Debug.Trace                    ( traceShowId )
+--import           Debug.Trace                    ( traceShowId )
 import qualified Test.Hspec                    as Test
 
 newtype AttackPower = AttackPower Int deriving (Show, Eq, Ord)
@@ -163,27 +161,39 @@ move g (k, v) (k', _) =
         []  -> inserted
         adj -> snd $ attack newUnit adj inserted
 
+allPaths :: Grid -> Pair -> Pair -> [Path]
+allPaths g from to = go [] S.empty [[from]]
+ where
+  go :: [Path] -> S.Set Coord -> [Path] -> [Path]
+  go paths _ [] = drop 1 . reverse <$> paths -- empty queue
+  go paths visited (h : queue)
+    = let
+        v@(vc, _) = head h
+        visited'  = S.insert vc visited
+      in
+        if v == to
+          then let paths' = h : paths in go paths' visited' queue
+          else if shortestPath paths < length h
+            then drop 1 . reverse <$> paths
+            else
+              let
+                va = L.filter (not . alreadySeen visited')
+                  $ validAdjacentCells g to v
+                queue' = queue <> ((: h) <$> va)
+              in
+                go paths (visitNeighbours va visited') queue'
 
--- this returns way more paths than it needs to because the visited tracking is
--- not right. The visited state needs to be shared between branches. But that
--- only works if we are traversing breadth first which we were not doing before.
--- also might work if we recorded the depth with each visit. Then only
--- short-circuit if we have already visited this node at shallower depth.
-allPaths :: Path -> S.Set Coord -> Grid -> Pair -> Pair -> [Path]
-allPaths path visited g from@(c, _) to
-  | S.member c visited
-  = []
-  | otherwise
-  = let visited' = S.insert c visited
-        va       = validAdjacentCells g to from
-    in  if to `elem` va
-          then [path <> [to]]
-          else concat $ (\f -> allPaths (path <> [f]) visited' g f to) <$> va
+  visitNeighbours :: [Pair] -> S.Set Coord -> S.Set Coord
+  visitNeighbours adj v = L.foldr (\(ac, _) v' -> S.insert ac v') v adj
+
+  shortestPath :: [Path] -> Int
+  shortestPath []    = maxBound
+  shortestPath paths = minimum $ length <$> paths
 
 
 shortestPath :: Grid -> Pair -> Pair -> Maybe (Int, Pair, Path)
 shortestPath g from to =
-  let paths  = allPaths [] S.empty g from to
+  let paths  = allPaths g from to
       mapped = (\p -> (length p, to, p)) <$> paths
   in  case L.sortBy comparePaths mapped of
         (shortest : _) -> Just shortest
@@ -614,8 +624,8 @@ runTests =
                     Nothing -> error "we expected to get a shortest path"
 
           Test.it "should find all paths correctly"
-            $ let paths = allPaths [] S.empty g from to
-              in  length paths `Test.shouldBe` (26 :: Int)
+            $ let paths = allPaths g from to
+              in  length paths `Test.shouldBe` (1 :: Int)
 
           Test.it "should find the correct adjacent cells"
             $ let paths = validAdjacentCells g to ((2, 2), Space)
@@ -677,25 +687,12 @@ runTests =
                     Nothing   -> error "this should not happen"
                     Just cell -> shortestPath g from (cell, Space)
               in  case res of
-                    Just (l, _, _) -> l `Test.shouldBe` (10 :: Int)
+                    Just (l, _, _) -> l `Test.shouldBe` (14 :: Int)
                     Nothing        -> error "this should not happen"
 
-
-          -- this test takes an insane amount of time so the problem lies in
-          -- here somewhere, just need to break it down some more
-          Test.xit "should successfully run a move"
-            $ let (complete, _g') = traceShowId $ takeATurn from g
+          Test.it "should successfully run a move"
+            $ let (complete, _g') = takeATurn from g
               in  complete `Test.shouldBe` False
-
-
--- findMove :: Grid -> [Pair] -> Pair -> Grid
--- findMove g possibleTargets unit = case findBestTarget g unit possibleTargets of
---   Nothing -> g
---   Just t  -> case shortestPath [] S.empty g unit (t, Space) of
---     Nothing        -> g
---     Just (_, _, p) -> case p of
---       (to : _) -> move g unit to
---       _        -> g
 
 fullGrid :: [String]
 fullGrid =
