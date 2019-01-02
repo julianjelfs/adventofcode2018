@@ -34,6 +34,7 @@ executable adventofcode2018
                       , Day14
                       , Day15
                       , Day15Tests
+                      , Day16
   main-is:             Main.hs
   default-language:    Haskell2010
   build-depends:       base >= 4.7 && < 5
@@ -55,3 +56,4 @@ executable adventofcode2018
                       , extra
                       , hspec
                       , mtl
+                      , array
