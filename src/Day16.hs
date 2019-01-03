@@ -94,15 +94,21 @@ partOne = do
             )
         <$> samples'
 
-partTwo :: IO [Int]
+partTwo :: IO Register
 partTwo = do
   samples <- parseSamples
   instrs  <- parseInstrs
   pure $ case (samples, instrs) of
     (Left err      , _             ) -> error $ show err
     (_             , Left err      ) -> error $ show err
-    (Right samples', Right _instrs') -> M.keys $ decode M.empty samples' opsMap
-
+    (Right samples', Right instrs') -> 
+        let decoded = decode M.empty samples' opsMap
+        in L.foldl' 
+            (\r i@(Instr opcode _ _ _) ->
+                case M.lookup opcode decoded of
+                    Nothing -> r
+                    Just op -> op r i
+            ) register instrs'
 
 decode
   :: M.Map Int Processor
@@ -118,9 +124,9 @@ decode decoded samples encoded =
               $   (\(k, op) -> (opcode, op, k, r2 == op r1 i))
               <$> M.toList encoded'
             of
-              [(code, op, k, _)] ->
-                ( M.insert code op decoded'
-                , M.filterWithKey (\k' _ -> k /= k') encoded'
+              [(opcode, op, k, _)] ->
+                ( M.insert opcode op decoded'
+                , M.delete k encoded'
                 )
               _ -> (decoded', encoded')
         )
@@ -130,7 +136,6 @@ decode decoded samples encoded =
 
 fourth :: (Int, Processor, Int, Bool) -> Bool
 fourth (_, _, _, a) = a
-
 
 parseInstrs :: IO (Either P.ParseError [Instr])
 parseInstrs =
@@ -162,7 +167,3 @@ parseSample = do
   after  <- parseRegister "After:  " <* P.endOfLine
   _      <- P.endOfLine
   pure $ SampleInstr before instr after
-
-
-testParseInstr :: String -> Either P.ParseError Instr
-testParseInstr = C.parse parseInstr
