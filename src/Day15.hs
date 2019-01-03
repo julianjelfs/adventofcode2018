@@ -173,6 +173,13 @@ move elfDeathFatal g (k, v) (k', _) =
         []  -> updated
         adj -> snd $ attack elfDeathFatal newUnit adj updated
 
+-- we can try modifying this so that instead of stopping when we get to the
+-- target we just create a map of all reachable points. For each point we record
+-- the shortest path(s) to that point. That way we just need to do a complete
+-- BFS once and we can remove the separate Dijkstra (which is just the same as
+-- BFS in the case of uniform edge weights anyway). From the resulting map we
+-- can find the best target *and* the shortest path to it in one go so it should
+-- be twice as fast. Can I be bothered though?
 allPaths :: Grid -> Pair -> Pair -> [Path]
 allPaths g from to = go [] S.empty [[from]]
  where
