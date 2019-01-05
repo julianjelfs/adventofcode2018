@@ -15,15 +15,11 @@ data Ground
 
 type Coord = (Int, Int)
 
-solution :: IO Int
-solution = undefined
+solution :: IO (Either P.ParseError (M.Map Coord Ground))
+solution = parseVeins . lines <$> readFile "data/day17.txt"
 
-parseVeins :: IO (Either P.ParseError (M.Map Coord Ground))
-parseVeins =
-  (fmap . fmap) (M.fromList . concat)
-    $   traverse (C.parse parseVein)
-    .   lines
-    <$> readFile "data/day17.txt"
+parseVeins :: [String] -> Either P.ParseError (M.Map Coord Ground)
+parseVeins lines = M.fromList . concat <$> traverse (C.parse parseVein) lines
 
 parseVein :: Parser [(Coord, Ground)]
 parseVein = do
@@ -37,3 +33,15 @@ parseVein = do
     'x' -> [ (ca, y) | y <- [bfrom .. bto] ]
     'y' -> [ (x, ca) | x <- [bfrom .. bto] ]
     _   -> error "unexpected input found"
+
+testGrid :: [String]
+testGrid =
+  [ "x=495, y=2..7"
+  , "y=7, x=495..501"
+  , "x=501, y=3..7"
+  , "x=498, y=2..4"
+  , "x=506, y=1..2"
+  , "x=498, y=10..13"
+  , "x=504, y=10..13"
+  , "y=13, x=498..504"
+  ]
