@@ -10,20 +10,26 @@ data Acre
     = OpenGround
     | Tree
     | Lumberyard
-    deriving Show
+    deriving (Show, Ord, Eq)
 
 type Coord = (Int, Int)
 
 solution :: IO (Int, Int)
 solution = do
   map <- parseText . lines <$> readFile "data/day18.txt"
-  pure (evolve 10 map, evolve 1000000000 map)
+  pure (evolve 10 map, evolve 468 map)
+
+-- after 459 iterations we see a duplicate and after that we see a duplicate
+-- again after each 28 iterations
+-- so when we see the first dup we have 999999541 iterations left. If we div
+-- that by 28 we have a remainder of 9 so we can just do 9 more iterations
+-- giving a total of 468 and that should be the same answer
 
 evolve :: Int -> M.Map Coord Acre -> Int
 evolve iterations map =
   let map'   = L.foldl' (\m _ -> eachMinute m) map [1 .. iterations]
       (t, l) = treesOrLumber map'
-  in  t * l
+  in  (t * l)
 
 treesOrLumber :: M.Map Coord Acre -> (Int, Int)
 treesOrLumber = M.foldr
